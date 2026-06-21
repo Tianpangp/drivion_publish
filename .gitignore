@@ -1,0 +1,106 @@
+# ============================================
+# 擎动智造 Drivion - .gitignore
+# 工业自动化执行平台
+# ============================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Conda ---
+.conda/
+
+# --- Node / Vue.js ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Runtime Data (生成/运行时数据) ---
+core/web/data/*
+
+# --- SQLite (排除已跟踪的文件外的所有 sqlite) ---
+*.sqlite
+*.sqlite3
+*.db
+
+# --- 日志 ---
+*.log
+*.log.*
+
+# --- 环境变量 ---
+.env
+.env.local
+.env.*.local
+
+# --- RSA密钥 ---
+private_key.pem
+public_key.pem
+*.pem
+
+# --- 运行时进程文件 ---
+.web_server.pid
+.web_server.screen
+
+# --- macOS ---
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# --- 系统文件 ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# --- 压缩包 ---
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# --- 临时文件 ---
+tmp/
+temp/
+*.tmp
+*.bak
+*.cache
