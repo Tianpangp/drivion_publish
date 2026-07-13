@@ -37,6 +37,7 @@ class UserInfo(BaseModel):
     role: str  # 角色代码（如：admin, developer等）
     email: Optional[str] = None
     avatar: Optional[str] = None
+    permissions: List[str] = []
     
     class Config:
         from_attributes = True
@@ -78,4 +79,3 @@ class LoginResponse(BaseModel):
     code: int = 200
     message: str = "登录成功"
     data: TokenData
-

@@ -15,7 +15,13 @@ const routes: RouteRecordRaw[] = [
     children: [
       {
         path: '',
-        redirect: '/facilities'
+        redirect: '/equipment'
+      },
+      {
+        path: '/equipment',
+        name: 'Equipment',
+        component: () => import('../views/Equipment.vue'),
+        meta: { title: 'equipment' }
       },
       {
         path: '/facilities',
@@ -36,16 +42,10 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'autounit' }
       },
       {
-        path: '/interfaces',
-        name: 'Interfaces',
-        component: () => import('../views/Interfaces.vue'),
-        meta: { title: 'interfaces' }
-      },
-      {
-        path: '/deployment',
-        name: 'Deployment',
-        component: () => import('../views/Deployment.vue'),
-        meta: { title: 'deployment' }
+        path: '/approvals',
+        name: 'Approvals',
+        component: () => import('../views/Approvals.vue'),
+        meta: { title: 'approvals' }
       },
       {
         path: '/logs',
@@ -63,7 +63,7 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem('token')
   
   if (to.meta.requiresAuth !== false && !token) {

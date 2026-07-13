@@ -218,7 +218,7 @@ const handleUploadCancel = () => {
   uploadModalVisible.value = false
 }
 
-const handleEdit = (record: DeploymentManifest) => {
+const handleEdit = (_record: DeploymentManifest) => {
   // TODO: 实现编辑功能
   message.info('编辑功能开发中')
 }

@@ -100,7 +100,7 @@ async def get_operation_logs(
         message="获取成功",
         data=PaginatedResponse(
             list=log_list,
-            total=total,
+            total=total or 0,
             page=page,
             pageSize=pageSize
         )
@@ -206,7 +206,10 @@ async def export_logs(
         "publish": "发布",
         "unpublish": "下架",
         "apply": "应用",
-        "recall": "撤回"
+        "recall": "撤回",
+        "submit": "提交审批",
+        "approve": "审批通过",
+        "reject": "驳回"
     }
     
     result_map = {
@@ -243,4 +246,3 @@ async def export_logs(
             "Content-Disposition": f'attachment; filename="{filename}"'
         }
     )
-

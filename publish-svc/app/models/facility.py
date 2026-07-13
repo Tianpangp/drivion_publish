@@ -65,4 +65,25 @@ class Station(Base):
     
     # 关系
     line = relationship("Line", back_populates="stations")
+    equipment = relationship("Equipment", back_populates="station")
 
+
+class Equipment(Base):
+    """设备表"""
+    __tablename__ = "equipment"
+
+    id = Column(String(64), primary_key=True)
+    station_id = Column(String(64), ForeignKey("stations.id"), nullable=False, index=True)
+    name = Column(String(128), nullable=False, index=True)
+    code = Column(String(64), unique=True, index=True)
+    description = Column(Text)
+    equipment_type = Column(String(128))
+    vendor = Column(String(128))
+    model = Column(String(128))
+    status = Column(Enum("active", "inactive"), nullable=False, default="active", index=True)
+    is_deleted = Column(Integer, nullable=False, default=0, index=True)
+    create_user_id = Column(String(64), nullable=False, index=True)
+    create_time = Column(DateTime, nullable=False, default=datetime.utcnow)
+    update_time = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    station = relationship("Station", back_populates="equipment")

@@ -4,9 +4,9 @@
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-800">{{ t('autounit.title') }}</h1>
-        <p class="text-gray-500 mt-1">上传和管理 AutoUnit Python 包</p>
+        <p class="text-gray-500 mt-1">上传、审批和管理设备执行逻辑包，AutoUnit 最终绑定到具体设备</p>
       </div>
-      <a-button type="primary" @click="showUploadModal">
+      <a-button type="primary" @click="showUploadModal()">
         <template #icon>
           <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -22,8 +22,10 @@
       <div class="flex gap-4">
         <a-select v-model:value="filters.status" placeholder="发布状态" class="w-48" allow-clear @change="loadPackages">
           <a-select-option value="published">{{ t('autounit.published') }}</a-select-option>
-          <a-select-option value="unpublished">{{ t('autounit.unpublished') }}</a-select-option>
+          <a-select-option value="pending_testing">{{ t('autounit.pending_testing') }}</a-select-option>
           <a-select-option value="testing">{{ t('autounit.testing') }}</a-select-option>
+          <a-select-option value="pending_publish">{{ t('autounit.pending_publish') }}</a-select-option>
+          <a-select-option value="removed">{{ t('autounit.removed') }}</a-select-option>
         </a-select>
 
         <a-input-search v-model:value="filters.search" :placeholder="t('common.search')" size="middle" class="flex-1"
@@ -84,7 +86,7 @@
           </div>
 
           <div v-if="pkg.boundStations && pkg.boundStations.length > 0" class="mb-4">
-            <div class="text-xs text-gray-500 mb-2">绑定工位</div>
+            <div class="text-xs text-gray-500 mb-2">绑定设备</div>
             <div class="flex flex-wrap gap-1">
               <a-tag v-for="station in pkg.boundStations.slice(0, 3)" :key="station.id" size="small">
                 {{ station.name }}
@@ -96,15 +98,24 @@
           </div>
 
           <div class="flex gap-2 pt-4 border-t">
-            <a-button v-if="pkg.status === 'unpublished' || pkg.status === 'testing'" size="small" type="primary"
-              @click="handlePublish(pkg.id)">
-              {{ t('autounit.publish') }}
+            <a-button v-if="pkg.status === 'pending_testing'" size="small" type="primary"
+              @click="handleSubmitTesting(pkg.id)">
+              提交测试
+            </a-button>
+            <a-button v-if="pkg.status === 'pending_testing'" size="small" @click="showUploadModal(pkg.id)">更新</a-button>
+            <a-button v-if="pkg.status === 'pending_testing'" size="small" danger @click="handleDelete(pkg.id)">删除</a-button>
+            <a-button v-if="pkg.status === 'testing' || pkg.status === 'removed'" size="small" type="primary"
+              @click="handleSubmitPublish(pkg.id)">
+              {{ pkg.status === 'removed' ? '重新上架' : '提交发布' }}
             </a-button>
             <a-button size="small" @click="handleDownload(pkg.id, pkg.fileName)">
               {{ t('common.download') }}
             </a-button>
-            <a-button size="small" danger @click="handleRecall(pkg.id)">
-              {{ t('autounit.recall') }}
+            <a-button v-if="pkg.status === 'published'" size="small" danger @click="handleSubmitRemove(pkg.id)">
+              申请下架
+            </a-button>
+            <a-button v-if="canReject(pkg.status)" size="small" danger @click="handleReject(pkg.id)">
+              退回待测试
             </a-button>
           </div>
         </div>
@@ -119,24 +130,12 @@
     </div>
 
     <!-- 上传对话框 -->
-    <a-modal v-model:open="uploadModalVisible" :title="t('autounit.upload')" @ok="handleUploadOk"
+    <a-modal v-model:open="uploadModalVisible" :title="updatingId ? '更新 AutoUnit 包' : t('autounit.upload')" @ok="handleUploadOk"
       @cancel="handleUploadCancel" :confirmLoading="uploading" width="600px">
-      <a-form :model="uploadForm" layout="vertical" class="mt-4">
-        <a-form-item :label="t('autounit.packageName')" name="name" :rules="[{ required: true, message: '请输入包名称' }]">
-          <a-input v-model:value="uploadForm.name" placeholder="请输入包名称" />
-        </a-form-item>
-
-        <a-form-item :label="t('common.version')" name="version" :rules="[{ required: true, message: '请输入版本号' }]">
-          <a-input v-model:value="uploadForm.version" placeholder="例如: 1.0.0" />
-        </a-form-item>
-
-        <a-form-item :label="t('common.description')" name="description">
-          <a-textarea v-model:value="uploadForm.description" :placeholder="t('common.description')" :rows="3" />
-        </a-form-item>
-
+      <a-form layout="vertical" class="mt-4">
         <a-form-item :label="t('common.upload')" name="file">
           <a-upload-dragger v-model:fileList="fileList" :before-upload="beforeUpload" :max-count="1"
-            accept=".zip,.tar.gz">
+            accept=".zip,.tar,.tar.gz,.tgz">
             <p class="ant-upload-drag-icon">
               <svg class="w-12 h-12 mx-auto text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -144,7 +143,7 @@
               </svg>
             </p>
             <p class="ant-upload-text">{{ t('autounit.dragText') }}</p>
-            <p class="ant-upload-hint">{{ t('autounit.dragHint') }}</p>
+            <p class="ant-upload-hint">最大 100MB；包内必须包含 drivion.project.json，名称和版本由后端自动识别。</p>
           </a-upload-dragger>
         </a-form-item>
       </a-form>
@@ -165,6 +164,7 @@ const { t } = useI18n()
 const loading = ref(false)
 const uploadModalVisible = ref(false)
 const uploading = ref(false)
+const updatingId = ref<string | null>(null)
 const fileList = ref<any[]>([])
 const packagesData = ref<AutoUnitPackage[]>([])
 
@@ -179,12 +179,6 @@ const pagination = reactive({
   total: 0
 })
 
-const uploadForm = reactive({
-  name: '',
-  version: '',
-  description: '',
-  pythonVersion: ''
-})
 
 // 加载包列表
 const loadPackages = async () => {
@@ -209,7 +203,13 @@ const loadPackages = async () => {
 const getStatusColor = (status: string) => {
   if (status === 'published') return 'success'
   if (status === 'testing') return 'processing'
-  return 'default'
+  if (status === 'pending_testing' || status === 'pending_publish' || status === 'pending_remove') return 'warning'
+  if (status === 'removed') return 'default'
+  return 'warning'
+}
+
+const canReject = (status: string) => {
+  return ['testing', 'pending_publish'].includes(status)
 }
 
 const getStatusName = (status: string) => {
@@ -222,37 +222,35 @@ const formatFileSize = (bytes: number) => {
   return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
 }
 
-const showUploadModal = () => {
-  uploadForm.name = ''
-  uploadForm.version = ''
-  uploadForm.description = ''
-  uploadForm.pythonVersion = ''
+const showUploadModal = (id?: string) => {
   fileList.value = []
+  updatingId.value = id || null
   uploadModalVisible.value = true
 }
 
-const beforeUpload: UploadProps['beforeUpload'] = () => {
+const beforeUpload: UploadProps['beforeUpload'] = (file) => {
+  const maxSize = 100 * 1024 * 1024
+  if (file.size > maxSize) {
+    message.error('AutoUnit 包不能超过 100MB')
+    return false
+  }
   return false
 }
 
 const handleUploadOk = async () => {
-  if (!uploadForm.name || !uploadForm.version || fileList.value.length === 0) {
-    message.error('请填写完整信息并上传文件')
+  if (fileList.value.length === 0) {
+    message.error('请上传 AutoUnit 包')
     return
   }
 
   uploading.value = true
 
   try {
-    await autounitApi.uploadAutoUnitPackage({
-      file: fileList.value[0].originFileObj,
-      name: uploadForm.name,
-      version: uploadForm.version,
-      description: uploadForm.description,
-      pythonVersion: uploadForm.pythonVersion
-    })
+    const file = fileList.value[0].originFileObj
+    if (updatingId.value) await autounitApi.replaceAutoUnitPackage(updatingId.value, file)
+    else await autounitApi.uploadAutoUnitPackage({ file })
 
-    message.success('上传成功')
+    message.success(updatingId.value ? '更新成功' : '上传成功')
     uploadModalVisible.value = false
     await loadPackages()
   } catch (error) {
@@ -266,38 +264,86 @@ const handleUploadCancel = () => {
   uploadModalVisible.value = false
 }
 
-const handlePublish = async (id: string) => {
+const handleSubmitTesting = async (id: string) => {
   Modal.confirm({
-    title: '确认发布',
-    content: '确认发布此 AutoUnit 包吗？',
+    title: '提交测试',
+    content: '审批通过后转为已测试。',
     okText: t('common.confirm'),
     cancelText: t('common.cancel'),
     onOk: async () => {
       try {
-        await autounitApi.updateAutoUnitStatus(id, 'published')
-        message.success(t('autounit.publishSuccess'))
+        await autounitApi.submitAutoUnitTesting(id)
+        message.success('已提交测试审批')
         await loadPackages()
       } catch (error) {
-        console.error('发布失败:', error)
+        console.error('提交测试失败:', error)
       }
     }
   })
 }
 
-const handleRecall = async (id: string) => {
+const handleSubmitPublish = async (id: string) => {
   Modal.confirm({
-    title: t('autounit.recallConfirm'),
-    content: '撤回后该包将被删除，此操作不可恢复。',
+    title: '提交发布',
+    content: '提交后进入待发布状态，审批通过后转为已发布。',
+    okText: t('common.confirm'),
+    cancelText: t('common.cancel'),
+    onOk: async () => {
+      try {
+        await autounitApi.submitAutoUnitPublish(id)
+        message.success('已提交发布')
+        await loadPackages()
+      } catch (error) {
+        console.error('提交发布失败:', error)
+      }
+    }
+  })
+}
+
+const handleReject = async (id: string) => {
+  Modal.confirm({
+    title: '退回待测试',
+    content: '该版本将回到待测试，可重新更新、提交测试或删除。',
     okText: t('common.confirm'),
     cancelText: t('common.cancel'),
     okType: 'danger',
     onOk: async () => {
       try {
-        await autounitApi.recallAutoUnitPackage(id)
-        message.success(t('autounit.recallSuccess'))
+        await autounitApi.rejectAutoUnitPackage(id)
+        message.success('已退回待测试')
         await loadPackages()
       } catch (error) {
-        console.error('撤回失败:', error)
+        console.error('驳回失败:', error)
+      }
+    }
+  })
+}
+
+const handleDelete = (id: string) => {
+  Modal.confirm({
+    title: '删除待测试版本', content: '记录和已上传的包文件都会直接删除，此操作不可恢复。', okType: 'danger',
+    onOk: async () => {
+      await autounitApi.deleteAutoUnitPackage(id)
+      message.success('已删除')
+      await loadPackages()
+    }
+  })
+}
+
+const handleSubmitRemove = async (id: string) => {
+  Modal.confirm({
+    title: '申请下架',
+    content: '下架需要审批，通过后该版本不再允许新绑定和新拉取。',
+    okText: t('common.confirm'),
+    cancelText: t('common.cancel'),
+    okType: 'danger',
+    onOk: async () => {
+      try {
+        await autounitApi.submitAutoUnitRemove(id)
+        message.success('已提交下架审批')
+        await loadPackages()
+      } catch (error) {
+        console.error('提交下架失败:', error)
       }
     }
   })

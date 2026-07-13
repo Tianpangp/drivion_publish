@@ -1,157 +1,98 @@
 <template>
   <div class="space-y-6">
-    <!-- 页面标题和操作 -->
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-800">{{ t('drivers.title') }}</h1>
-        <p class="text-gray-500 mt-1">上传和管理 Java、Python、C++ 驱动包</p>
+        <p class="text-gray-500 mt-1">上传、审批和管理 HAL 驱动包版本；HAL 由 AutoUnit 在 Exe 中调用</p>
       </div>
-      <a-button type="primary" @click="showUploadModal">
-        <template #icon>
-          <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-          </svg>
-        </template>
-        {{ t('drivers.upload') }}
-      </a-button>
+      <a-button type="primary" @click="showUploadModal()">{{ t('drivers.upload') }}</a-button>
     </div>
 
-    <!-- 筛选器 -->
     <div class="bg-white rounded-xl p-4 shadow-sm">
       <div class="flex gap-4">
-        <a-select v-model:value="filters.type" :placeholder="t('drivers.selectType')" class="w-48" allow-clear
-          @change="loadDrivers">
-          <a-select-option value="java">{{ t('drivers.java') }}</a-select-option>
-          <a-select-option value="python">{{ t('drivers.python') }}</a-select-option>
-          <a-select-option value="cpp">{{ t('drivers.cpp') }}</a-select-option>
-        </a-select>
-
         <a-select v-model:value="filters.status" placeholder="发布状态" class="w-48" allow-clear @change="loadDrivers">
           <a-select-option value="published">{{ t('drivers.published') }}</a-select-option>
-          <a-select-option value="unpublished">{{ t('drivers.unpublished') }}</a-select-option>
+          <a-select-option value="pending_testing">{{ t('drivers.pending_testing') }}</a-select-option>
           <a-select-option value="testing">{{ t('drivers.testing') }}</a-select-option>
+          <a-select-option value="pending_publish">{{ t('drivers.pending_publish') }}</a-select-option>
+          <a-select-option value="pending_remove">{{ t('drivers.pending_remove') }}</a-select-option>
+          <a-select-option value="removed">已下架</a-select-option>
         </a-select>
-
-        <a-input-search v-model:value="filters.search" :placeholder="t('common.search')" class="flex-1" allow-clear
-          @search="loadDrivers" />
+        <a-input-search v-model:value="filters.search" :placeholder="t('common.search')" class="flex-1" allow-clear @search="loadDrivers" />
       </div>
     </div>
 
-    <!-- 驱动包列表 -->
-    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-      <a-table :columns="columns" :data-source="driversData" :pagination="pagination" :loading="loading"
-        @change="handleTableChange">
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'name'">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-lg flex items-center justify-center" :class="getTypeColor(record.type)">
-                <component :is="getTypeIcon(record.type)" class="w-5 h-5" />
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div v-for="pkg in driversData" :key="pkg.id" class="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+        <div class="p-6">
+          <div class="flex items-start justify-between mb-4">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                <IconPython class="w-7 h-7" />
               </div>
-              <div>
-                <div class="font-medium text-gray-800">{{ record.name }}</div>
-                <div class="text-xs text-gray-500">{{ record.fileName }}</div>
+              <div class="min-w-0">
+                <h3 class="font-semibold text-gray-800 break-words">{{ pkg.name }}</h3>
+                <p class="text-sm text-gray-500">v{{ pkg.version }}</p>
               </div>
             </div>
-          </template>
+            <a-tag :color="getStatusColor(pkg.status)">{{ getStatusName(pkg.status) }}</a-tag>
+          </div>
 
-          <template v-else-if="column.key === 'type'">
-            <a-tag :color="getDriverTypeColor(record.type)">
-              {{ getDriverTypeName(record.type) }}
-            </a-tag>
-          </template>
-
-          <template v-else-if="column.key === 'version'">
-            <span class="font-mono text-sm">{{ record.version }}</span>
-          </template>
-
-          <template v-else-if="column.key === 'size'">
-            <span class="text-gray-600">{{ formatFileSize(record.size) }}</span>
-          </template>
-
-          <template v-else-if="column.key === 'status'">
-            <a-tag :color="getStatusColor(record.status)">
-              {{ getStatusName(record.status) }}
-            </a-tag>
-          </template>
-
-          <template v-else-if="column.key === 'uploadTime'">
-            <span class="text-gray-600 text-sm">{{ record.uploadTime }}</span>
-          </template>
-
-          <template v-else-if="column.key === 'actions'">
-            <div class="flex gap-2">
-              <a-button v-if="record.status === 'unpublished' || record.status === 'testing'" size="small" type="link"
-                @click="handlePublish(record.id)">
-                {{ t('drivers.publish') }}
-              </a-button>
-              <a-button size="small" type="link" @click="handleDownload(record.id, record.fileName)">
-                {{ t('common.download') }}
-              </a-button>
-              <a-button v-if="record.status === 'published'" size="small" type="link" danger
-                @click="handleUnpublish(record.id)">
-                {{ t('drivers.unpublish') }}
-              </a-button>
-              <a-button v-if="record.status === 'unpublished' || record.status === 'testing'" size="small" type="link"
-                danger @click="handleRecall(record.id)">
-                {{ t('drivers.recall') }}
-              </a-button>
+          <div class="space-y-2 mb-4">
+            <div class="flex items-center text-sm text-gray-600">
+              <span class="text-gray-400 mr-2">文件</span>
+              <span class="break-all">{{ pkg.fileName }}</span>
             </div>
-          </template>
-        </template>
-      </a-table>
+            <div class="flex items-center text-sm text-gray-600">
+              <span class="text-gray-400 mr-2">类型</span>
+              <a-tag color="blue">Python</a-tag>
+            </div>
+            <div class="flex items-center text-sm text-gray-600">
+              <span class="text-gray-400 mr-2">上传</span>
+              {{ pkg.uploadTime }}
+            </div>
+            <div class="flex items-center text-sm text-gray-600">
+              <span class="text-gray-400 mr-2">大小</span>
+              {{ formatFileSize(pkg.size) }}
+            </div>
+          </div>
+
+          <div v-if="pkg.description" class="mb-4">
+            <p class="text-sm text-gray-600 line-clamp-2">{{ pkg.description }}</p>
+          </div>
+
+          <div class="flex flex-wrap gap-2 pt-4 border-t">
+            <a-button v-if="pkg.status === 'pending_testing'" size="small" type="primary" @click="handleSubmitTesting(pkg.id)">提交测试</a-button>
+            <a-button v-if="pkg.status === 'pending_testing'" size="small" @click="showUploadModal(pkg.id)">更新</a-button>
+            <a-button v-if="pkg.status === 'pending_testing'" size="small" danger @click="handleDelete(pkg.id)">删除</a-button>
+            <a-button v-if="pkg.status === 'testing' || pkg.status === 'removed'" size="small" type="primary" @click="handleSubmitPublish(pkg.id)">
+              {{ pkg.status === 'removed' ? '重新上架' : '提交发布' }}
+            </a-button>
+            <a-button size="small" @click="handleDownload(pkg.id, pkg.fileName)">{{ t('common.download') }}</a-button>
+            <a-button v-if="pkg.status === 'published'" size="small" danger @click="handleSubmitRemove(pkg.id)">申请下架</a-button>
+            <a-button v-if="canReject(pkg.status)" size="small" danger @click="handleReject(pkg.id)">退回待测试</a-button>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- 上传对话框 -->
-    <a-modal v-model:open="uploadModalVisible" :title="t('drivers.upload')" @ok="handleUploadOk"
+    <div class="flex justify-center">
+      <a-pagination v-model:current="pagination.current" v-model:pageSize="pagination.pageSize"
+        :total="pagination.total" :show-total="(total: number) => `共 ${total} 条`" show-size-changer
+        @change="loadDrivers" />
+    </div>
+
+    <a-modal v-model:open="uploadModalVisible" :title="updatingId ? '更新 HAL 驱动包' : t('drivers.upload')" @ok="handleUploadOk"
       @cancel="handleUploadCancel" :confirmLoading="uploading" width="600px">
-      <a-form :model="uploadForm" layout="vertical" class="mt-4">
-        <a-form-item :label="t('drivers.driverType')" name="type" :rules="[{ required: true, message: '请选择驱动类型' }]">
-          <a-select v-model:value="uploadForm.type" :placeholder="t('drivers.selectType')">
-            <a-select-option value="java">
-              <div class="flex items-center gap-2">
-                <span>☕</span>
-                {{ t('drivers.java') }}
-              </div>
-            </a-select-option>
-            <a-select-option value="python">
-              <div class="flex items-center gap-2">
-                <span>🐍</span>
-                {{ t('drivers.python') }}
-              </div>
-            </a-select-option>
-            <a-select-option value="cpp">
-              <div class="flex items-center gap-2">
-                <span>⚙️</span>
-                {{ t('drivers.cpp') }}
-              </div>
-            </a-select-option>
-          </a-select>
-        </a-form-item>
-
-        <a-form-item :label="t('common.name')" name="name" :rules="[{ required: true, message: '请输入驱动名称' }]">
-          <a-input v-model:value="uploadForm.name" placeholder="请输入驱动名称" />
-        </a-form-item>
-
-        <a-form-item :label="t('common.version')" name="version" :rules="[{ required: true, message: '请输入版本号' }]">
-          <a-input v-model:value="uploadForm.version" placeholder="例如: 1.0.0" />
-        </a-form-item>
-
-        <a-form-item :label="t('common.description')" name="description">
-          <a-textarea v-model:value="uploadForm.description" :placeholder="t('common.description')" :rows="3" />
-        </a-form-item>
-
+      <a-form layout="vertical" class="mt-4">
         <a-form-item :label="t('common.upload')" name="file">
           <a-upload-dragger v-model:fileList="fileList" :before-upload="beforeUpload" :max-count="1"
-            accept=".zip,.tar.gz,.dll,.so">
+            accept=".zip,.tar,.tar.gz,.tgz">
             <p class="ant-upload-drag-icon">
-              <svg class="w-12 h-12 mx-auto text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
+              <IconPython class="w-12 h-12 mx-auto text-blue-500" />
             </p>
             <p class="ant-upload-text">{{ t('drivers.dragText') }}</p>
-            <p class="ant-upload-hint">{{ t('drivers.dragHint') }}</p>
+            <p class="ant-upload-hint">当前只支持 Python HAL 包；包内需包含 pyproject.toml，由后端自动识别名称、版本和 entry point。</p>
           </a-upload-dragger>
         </a-form-item>
       </a-form>
@@ -163,87 +104,30 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
-import type { UploadProps, TableProps } from 'ant-design-vue'
+import type { UploadProps } from 'ant-design-vue'
 import * as driversApi from '../api/drivers'
-import type { DriverPackage, DriverType, DriverStatus } from '../api/drivers'
+import type { DriverPackage, DriverStatus } from '../api/drivers'
 
 const { t } = useI18n()
 
 const loading = ref(false)
 const uploadModalVisible = ref(false)
 const uploading = ref(false)
+const updatingId = ref<string | null>(null)
 const fileList = ref<any[]>([])
 const driversData = ref<DriverPackage[]>([])
 
 const filters = reactive({
   search: '',
-  type: undefined as DriverType | undefined,
   status: undefined as DriverStatus | undefined
 })
 
 const pagination = reactive({
   current: 1,
-  pageSize: 10,
-  total: 0,
-  showSizeChanger: true,
-  showTotal: (total: number) => `共 ${total} 条`
+  pageSize: 12,
+  total: 0
 })
 
-const uploadForm = reactive({
-  type: undefined as DriverType | undefined,
-  name: '',
-  version: '',
-  description: '',
-  protocol: '',
-  manufacturer: '',
-  deviceModel: ''
-})
-
-const columns = [
-  {
-    title: t('common.name'),
-    dataIndex: 'name',
-    key: 'name',
-    width: 300
-  },
-  {
-    title: t('drivers.driverType'),
-    dataIndex: 'type',
-    key: 'type',
-    width: 120
-  },
-  {
-    title: t('common.version'),
-    dataIndex: 'version',
-    key: 'version',
-    width: 100
-  },
-  {
-    title: '文件大小',
-    dataIndex: 'size',
-    key: 'size',
-    width: 120
-  },
-  {
-    title: t('common.status'),
-    key: 'status',
-    width: 100
-  },
-  {
-    title: t('drivers.uploadTime'),
-    dataIndex: 'uploadTime',
-    key: 'uploadTime',
-    width: 180
-  },
-  {
-    title: t('common.actions'),
-    key: 'actions',
-    fixed: 'right',
-    width: 250
-  }
-]
-
-// 加载驱动包列表
 const loadDrivers = async () => {
   loading.value = true
   try {
@@ -251,57 +135,28 @@ const loadDrivers = async () => {
       page: pagination.current,
       pageSize: pagination.pageSize,
       search: filters.search,
-      type: filters.type,
       status: filters.status
     })
-
     driversData.value = response.data.list
     pagination.total = response.data.total
-  } catch (error) {
-    console.error('加载驱动包列表失败:', error)
   } finally {
     loading.value = false
   }
 }
 
-// 表格变化处理
-const handleTableChange: TableProps['onChange'] = (pag) => {
-  pagination.current = pag.current || 1
-  pagination.pageSize = pag.pageSize || 10
-  loadDrivers()
-}
-
-const getTypeColor = (type: string) => {
-  if (type === 'java') return 'bg-orange-100 text-orange-600'
-  if (type === 'python') return 'bg-blue-100 text-blue-600'
-  return 'bg-purple-100 text-purple-600'
-}
-
-const getTypeIcon = (type: string) => {
-  if (type === 'java') return IconJava
-  if (type === 'python') return IconPython
-  return IconCpp
-}
-
-const getDriverTypeColor = (type: string) => {
-  if (type === 'java') return 'orange'
-  if (type === 'python') return 'blue'
-  return 'purple'
-}
-
-const getDriverTypeName = (type: string) => {
-  return t(`drivers.${type}`)
-}
-
 const getStatusColor = (status: string) => {
   if (status === 'published') return 'success'
   if (status === 'testing') return 'processing'
-  return 'default'
+  if (status === 'pending_testing' || status === 'pending_publish' || status === 'pending_remove') return 'warning'
+  if (status === 'removed') return 'default'
+  return 'warning'
 }
 
-const getStatusName = (status: string) => {
-  return t(`drivers.${status}`)
+const canReject = (status: string) => {
+  return ['testing', 'pending_publish'].includes(status)
 }
+
+const getStatusName = (status: string) => t(`drivers.${status}`)
 
 const formatFileSize = (bytes: number) => {
   if (bytes < 1024) return bytes + ' B'
@@ -309,47 +164,27 @@ const formatFileSize = (bytes: number) => {
   return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
 }
 
-const showUploadModal = () => {
-  uploadForm.type = undefined
-  uploadForm.name = ''
-  uploadForm.version = ''
-  uploadForm.description = ''
-  uploadForm.protocol = ''
-  uploadForm.manufacturer = ''
-  uploadForm.deviceModel = ''
+const showUploadModal = (id?: string) => {
   fileList.value = []
+  updatingId.value = id || null
   uploadModalVisible.value = true
 }
 
-const beforeUpload: UploadProps['beforeUpload'] = () => {
-  return false
-}
+const beforeUpload: UploadProps['beforeUpload'] = () => false
 
 const handleUploadOk = async () => {
-  if (!uploadForm.type || !uploadForm.name || !uploadForm.version || fileList.value.length === 0) {
-    message.error('请填写完整信息并上传文件')
+  if (fileList.value.length === 0) {
+    message.error('请上传 HAL 驱动包')
     return
   }
-
   uploading.value = true
-
   try {
-    await driversApi.uploadDriverPackage({
-      file: fileList.value[0].originFileObj,
-      type: uploadForm.type,
-      name: uploadForm.name,
-      version: uploadForm.version,
-      description: uploadForm.description,
-      protocol: uploadForm.protocol,
-      manufacturer: uploadForm.manufacturer,
-      deviceModel: uploadForm.deviceModel
-    })
-
-    message.success(t('drivers.uploadSuccess'))
+    const file = fileList.value[0].originFileObj
+    if (updatingId.value) await driversApi.replaceDriverPackage(updatingId.value, file)
+    else await driversApi.uploadDriverPackage({ file })
+    message.success(updatingId.value ? '更新成功' : t('drivers.uploadSuccess'))
     uploadModalVisible.value = false
     await loadDrivers()
-  } catch (error) {
-    console.error('上传失败:', error)
   } finally {
     uploading.value = false
   }
@@ -359,94 +194,78 @@ const handleUploadCancel = () => {
   uploadModalVisible.value = false
 }
 
-const handlePublish = async (id: string) => {
+const handleSubmitTesting = (id: string) => {
   Modal.confirm({
-    title: '确认发布',
-    content: '确认发布此驱动包吗？发布后将可供使用。',
-    okText: t('common.confirm'),
-    cancelText: t('common.cancel'),
+    title: '提交测试',
+    content: '审批通过后转为已测试。',
     onOk: async () => {
-      try {
-        await driversApi.publishDriverPackage(id)
-        message.success(t('drivers.publishSuccess'))
-        await loadDrivers()
-      } catch (error) {
-        console.error('发布失败:', error)
-      }
+      await driversApi.submitDriverTesting(id)
+      message.success('已提交测试审批')
+      await loadDrivers()
     }
   })
 }
 
-const handleUnpublish = async (id: string) => {
+const handleSubmitPublish = (id: string) => {
   Modal.confirm({
-    title: t('drivers.unpublishConfirm'),
-    content: '下架后该驱动包将不可使用，但数据会保留。',
-    okText: t('common.confirm'),
-    cancelText: t('common.cancel'),
-    okType: 'danger',
+    title: '提交发布',
+    content: '提交后进入待发布状态，审批通过后转为已发布。',
     onOk: async () => {
-      try {
-        await driversApi.unpublishDriverPackage(id)
-        message.success(t('drivers.unpublishSuccess'))
-        await loadDrivers()
-      } catch (error) {
-        console.error('下架失败:', error)
-      }
+      await driversApi.submitDriverPublish(id)
+      message.success('已提交发布')
+      await loadDrivers()
     }
   })
 }
 
-const handleRecall = async (id: string) => {
+const handleSubmitRemove = (id: string) => {
   Modal.confirm({
-    title: t('drivers.recallConfirm'),
-    content: '撤回后该驱动包将被删除，此操作不可恢复。',
-    okText: t('common.confirm'),
-    cancelText: t('common.cancel'),
+    title: '申请下架',
+    content: '下架需要审批，通过后该版本不再允许新使用。',
     okType: 'danger',
     onOk: async () => {
-      try {
-        await driversApi.recallDriverPackage(id)
-        message.success(t('drivers.recallSuccess'))
-        await loadDrivers()
-      } catch (error) {
-        console.error('撤回失败:', error)
-      }
+      await driversApi.submitDriverRemove(id)
+      message.success('已提交下架审批')
+      await loadDrivers()
+    }
+  })
+}
+
+const handleReject = (id: string) => {
+  Modal.confirm({
+    title: '退回待测试',
+    content: '该版本将回到待测试，可重新更新、提交测试或删除。',
+    okType: 'danger',
+    onOk: async () => {
+      await driversApi.rejectDriverPackage(id)
+      message.success('已退回待测试')
+      await loadDrivers()
+    }
+  })
+}
+
+const handleDelete = (id: string) => {
+  Modal.confirm({
+    title: '删除待测试版本', content: '记录和已上传的包文件都会直接删除，此操作不可恢复。', okType: 'danger',
+    onOk: async () => {
+      await driversApi.deleteDriverPackage(id)
+      message.success('已删除')
+      await loadDrivers()
     }
   })
 }
 
 const handleDownload = async (id: string, fileName: string) => {
-  try {
-    const response = await driversApi.downloadDriverPackage(id)
-
-    // 创建下载链接
-    const url = window.URL.createObjectURL(new Blob([response.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', fileName)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-
-    message.success('下载成功')
-  } catch (error) {
-    console.error('下载失败:', error)
-  }
-}
-
-// 初始化
-onMounted(() => {
-  loadDrivers()
-})
-
-// 图标组件
-const IconJava = {
-  template: `
-    <svg viewBox="0 0 24 24" fill="currentColor">
-      <path d="M8.851 18.56s-.917.534.653.714c1.902.218 2.874.187 4.969-.211 0 0 .552.346 1.321.646-4.699 2.013-10.633-.118-6.943-1.149M8.276 15.933s-1.028.761.542.924c2.032.209 3.636.227 6.413-.308 0 0 .384.389.987.602-5.679 1.661-12.007.13-7.942-1.218M13.116 11.475c1.158 1.333-.304 2.533-.304 2.533s2.939-1.518 1.589-3.418c-1.261-1.772-2.228-2.652 3.007-5.688 0-.001-8.216 2.051-4.292 6.573M19.33 20.504s.679.559-.747.991c-2.712.822-11.288 1.069-13.669.033-.856-.373.75-.89 1.254-.998.527-.114.828-.093.828-.093-.953-.671-6.156 1.317-2.643 1.887 9.58 1.553 17.462-.7 14.977-1.82M9.292 13.21s-4.362 1.036-1.544 1.412c1.189.159 3.561.123 5.77-.062 1.806-.152 3.618-.477 3.618-.477s-.637.272-1.098.587c-4.429 1.165-12.986.623-10.522-.568 2.082-1.006 3.776-.892 3.776-.892M17.116 17.584c4.503-2.34 2.421-4.589.968-4.285-.355.074-.515.138-.515.138s.132-.207.385-.297c2.875-1.011 5.086 2.981-.928 4.562 0-.001.07-.062.09-.118M14.401 0s2.494 2.494-2.365 6.33c-3.896 3.077-.888 4.832-.001 6.836-2.274-2.053-3.943-3.858-2.824-5.539 1.644-2.469 6.197-3.665 5.19-7.627M9.734 23.924c4.322.277 10.959-.153 11.116-2.198 0 0-.302.775-3.572 1.391-3.688.694-8.239.613-10.937.168 0-.001.553.457 3.393.639"/>
-    </svg>
-  `
+  const response = await driversApi.downloadDriverPackage(id)
+  const url = window.URL.createObjectURL(new Blob([response.data]))
+  const link = document.createElement('a')
+  link.href = url
+  link.setAttribute('download', fileName)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+  message.success('下载成功')
 }
 
 const IconPython = {
@@ -457,11 +276,5 @@ const IconPython = {
   `
 }
 
-const IconCpp = {
-  template: `
-    <svg viewBox="0 0 24 24" fill="currentColor">
-      <path d="M22.394 6c-.167-.29-.398-.543-.652-.69L12.926.22c-.509-.294-1.34-.294-1.848 0L2.26 5.31c-.508.293-.923 1.013-.923 1.6v10.18c0 .294.104.62.271.91.167.29.398.543.652.69l8.816 5.09c.508.293 1.34.293 1.848 0l8.816-5.09c.254-.147.485-.4.652-.69.167-.29.27-.616.27-.91V6.91c.003-.294-.1-.62-.268-.91zM12 19.11c-3.92 0-7.109-3.19-7.109-7.11 0-3.92 3.19-7.11 7.11-7.11a7.133 7.133 0 016.156 3.553l-3.076 1.78a3.567 3.567 0 00-3.08-1.78A3.56 3.56 0 008.444 12 3.56 3.56 0 0012 15.555a3.57 3.57 0 003.08-1.778l3.078 1.78A7.135 7.135 0 0112 19.11zm7.11-6.715h-.79v.79h-.79v-.79h-.79v-.79h.79v-.79h.79v.79h.79v.79zm2.962 0h-.79v.79h-.79v-.79h-.79v-.79h.79v-.79h.79v.79h.79v.79z"/>
-    </svg>
-  `
-}
+onMounted(loadDrivers)
 </script>

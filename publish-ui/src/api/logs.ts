@@ -2,13 +2,13 @@ import request from '../utils/request'
 import type { ApiResponse, PageResponse } from '../utils/request'
 
 // 操作类型
-export type OperationType = 'create' | 'update' | 'delete' | 'upload' | 'bind' | 'unbind'
+export type OperationType = 'create' | 'update' | 'delete' | 'upload' | 'bind' | 'unbind' | 'submit' | 'approve' | 'reject'
 
 // 操作结果
 export type OperationResult = 'success' | 'failed'
 
 // 操作模块
-export type OperationModule = '厂区管理' | '线体管理' | '工位管理' | '驱动包管理' | 'AutoUnit包' | '界面管理' | '部署清单管理'
+export type OperationModule = '厂区管理' | '线体管理' | '工位管理' | '设备管理' | '现场结构' | '设备绑定' | '驱动包管理' | 'AutoUnit包' | '审批管理' | '界面管理' | '部署清单管理'
 
 // 日志信息
 export interface LogInfo {
@@ -81,4 +81,3 @@ export function exportLogs(data: ExportLogsParams) {
     responseType: 'blob'
   })
 }
-

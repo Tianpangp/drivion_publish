@@ -22,12 +22,16 @@ class Settings(BaseSettings):
     PORT: int = 8000
     
     # 数据库配置
+    # DB_TYPE: mysql / sqlite / postgresql
+    DB_TYPE: str = "sqlite"
     DB_HOST: str = "localhost"
     DB_PORT: int = 3306
     DB_USER: str = "root"
     DB_PASSWORD: str = ""
     DB_NAME: str = "publish_system"
     DB_CHARSET: str = "utf8mb4"
+    SQLITE_PATH: str = "./data/publish.db"
+    DATABASE_URL: str = ""
     
     # JWT 配置（RS256）
     JWT_ALGORITHM: str = "RS256"
@@ -50,6 +54,9 @@ class Settings(BaseSettings):
     # 文件上传配置
     UPLOAD_DIR: str = "./uploads"
     MAX_UPLOAD_SIZE: int = 1073741824  # 1GB
+    LOCAL_STORAGE_DIR: str = "./uploads/objects"
+    # OBJECT_STORAGE_PROVIDER: local / minio / s3
+    OBJECT_STORAGE_PROVIDER: str = "local"
     
     # MinIO 配置
     MINIO_ENDPOINT: str = "192.168.3.68:9000"
@@ -57,6 +64,14 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET: str = "publish-system"
     MINIO_SECURE: bool = False  # 是否使用 HTTPS
+
+    # S3 兼容对象存储配置（MinIO 也可复用这组配置）
+    S3_ENDPOINT_URL: str = ""
+    S3_ACCESS_KEY_ID: str = ""
+    S3_SECRET_ACCESS_KEY: str = ""
+    S3_BUCKET: str = "publish-system"
+    S3_REGION: str = "us-east-1"
+    S3_SECURE: bool = True
     
     # 日志配置
     LOG_LEVEL: str = "INFO"
@@ -71,6 +86,15 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         """数据库连接URL"""
+        if self.DATABASE_URL:
+            return self.DATABASE_URL
+        db_type = self.DB_TYPE.lower()
+        if db_type == "sqlite":
+            sqlite_path = Path(self.SQLITE_PATH)
+            sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+            return f"sqlite+aiosqlite:///{sqlite_path}"
+        if db_type in {"postgres", "postgresql"}:
+            return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         return f"mysql+aiomysql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?charset={self.DB_CHARSET}"
     
     @property

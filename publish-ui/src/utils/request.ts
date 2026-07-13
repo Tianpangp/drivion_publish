@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { AxiosInstance, AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
+import type { AxiosError, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { message } from 'ant-design-vue'
 import router from '../router'
 
@@ -24,7 +24,7 @@ export interface PageResponse<T = any> {
 }
 
 // 创建 axios 实例
-const service: AxiosInstance = axios.create({
+const service = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
   withCredentials: true // 允许携带 Cookie
@@ -115,5 +115,6 @@ service.interceptors.response.use(
   }
 )
 
-export default service
+const request = service as unknown as <T = any>(config: AxiosRequestConfig) => Promise<T>
 
+export default request

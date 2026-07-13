@@ -256,7 +256,6 @@ import * as interfacesApi from '../api/interfaces'
 import type { InterfaceInfo } from '../api/interfaces'
 import * as facilitiesApi from '../api/facilities'
 import type { StationSearchResult } from '../api/facilities'
-import type { ApiResponse } from '../utils/request'
 
 const { t } = useI18n()
 
@@ -450,7 +449,7 @@ const handleDelete = async (id: string) => {
   })
 }
 
-const handleDownload = async (id: string, name: string) => {
+const handleDownload = async (id: string, _name: string) => {
   try {
     // downloadInterfaceJson 已经内置了文件下载逻辑，包括中文文件名支持
     await interfacesApi.downloadInterfaceJson(id)

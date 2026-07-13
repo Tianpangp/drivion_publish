@@ -17,7 +17,7 @@ async def lifespan(app: FastAPI):
     """
     # 启动时执行
     print("🚀 应用启动中...")
-    # await init_db()  # 如果需要自动创建表，取消注释
+    await init_db()
     print("✅ 应用启动完成")
     
     yield
@@ -79,4 +79,3 @@ if __name__ == "__main__":
         reload=settings.DEBUG,
         log_level=settings.LOG_LEVEL.lower()
     )
-

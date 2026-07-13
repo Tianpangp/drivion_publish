@@ -2,7 +2,7 @@
 日志模型
 """
 from datetime import datetime
-from sqlalchemy import Column, String, Text, Enum, DateTime, Integer, JSON
+from sqlalchemy import Column, String, Text, DateTime, Integer, JSON
 from app.core.database import Base
 
 
@@ -11,16 +11,12 @@ class OperationLog(Base):
     __tablename__ = "operation_logs"
     
     id = Column(String(64), primary_key=True)
-    operation = Column(
-        Enum("create", "update", "delete", "upload", "bind", "unbind", "publish", "unpublish", "apply", "recall"),
-        nullable=False,
-        index=True
-    )
+    operation = Column(String(32), nullable=False, index=True)
     module = Column(String(64), nullable=False, index=True)
     operator_id = Column(String(64), nullable=False, index=True)
     operator = Column(String(128), nullable=False)
     role = Column(String(64))
-    result = Column(Enum("success", "failed"), nullable=False, index=True)
+    result = Column(String(16), nullable=False, index=True)
     time = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     description = Column(Text)
     ip = Column(String(64))
@@ -32,4 +28,3 @@ class OperationLog(Base):
     response_time = Column(Integer)  # 响应时间（毫秒）
     target_id = Column(String(64), index=True)
     target_type = Column(String(64), index=True)
-

@@ -4,7 +4,7 @@
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-800">{{ t('facilities.title') }}</h1>
-        <p class="text-gray-500 mt-1">管理厂区、线体和工位的层级结构</p>
+        <p class="text-gray-500 mt-1">管理厂区、线体、工位和设备的四级结构</p>
       </div>
       <div class="flex gap-3">
         <a-button @click="showCreateModal('factory')">
@@ -37,10 +37,10 @@
         <a-tree v-if="treeData.length > 0" :tree-data="filteredTreeData" :expanded-keys="expandedKeys"
           @expand="onExpand" class="facility-tree">
           <template #title="{ title, key, type }">
-            <div class="flex items-center justify-between group py-1">
+            <div class="facility-node flex items-center justify-between group">
               <div class="flex items-center gap-3">
-                <span class="w-8 h-8 rounded-lg flex items-center justify-center" :class="getTypeColor(type)">
-                  <component :is="getTypeIcon(type)" class="w-5 h-5" />
+                <span class="facility-node-icon" :class="getTypeColor(type)">
+                  <component :is="getTypeIcon(type)" class="facility-svg-icon" />
                 </span>
                 <div>
                   <div class="font-medium text-gray-800">{{ title }}</div>
@@ -53,6 +53,9 @@
                 </a-button>
                 <a-button v-if="type === 'line'" size="small" type="link" @click.stop="showCreateModal('station', key)">
                   添加工位
+                </a-button>
+                <a-button v-if="type === 'station'" size="small" type="link" @click.stop="showCreateModal('equipment', key)">
+                  添加设备
                 </a-button>
                 <a-button size="small" type="link" @click.stop="handleEdit(key, type)">
                   {{ t('common.edit') }}
@@ -87,8 +90,17 @@
           <a-input v-model:value="formState.name" :placeholder="t('facilities.stationName')" />
         </a-form-item>
 
+        <a-form-item v-if="modalType === 'equipment'" :label="t('facilities.equipmentName')" name="name"
+          :rules="[{ required: true, message: '请输入设备名称' }]">
+          <a-input v-model:value="formState.name" :placeholder="t('facilities.equipmentName')" />
+        </a-form-item>
+
         <a-form-item v-if="modalType === 'station'" :label="t('facilities.stationCode')" name="code">
           <a-input v-model:value="formState.code" placeholder="工位编号（可选）" />
+        </a-form-item>
+
+        <a-form-item v-if="modalType === 'equipment'" :label="t('facilities.equipmentCode')" name="code">
+          <a-input v-model:value="formState.code" placeholder="设备编号（可选）" />
         </a-form-item>
 
         <a-form-item v-if="modalType === 'factory'" label="地址" name="location">
@@ -102,6 +114,19 @@
         <a-form-item v-if="modalType === 'station'" label="MAC地址" name="mac">
           <a-input v-model:value="formState.mac" placeholder="工位设备MAC（可选）" />
         </a-form-item>
+
+        <a-form-item v-if="modalType === 'equipment'" label="设备类型" name="equipmentType">
+          <a-input v-model:value="formState.equipmentType" placeholder="例如：视觉检测、运动控制、IO" />
+        </a-form-item>
+
+        <div v-if="modalType === 'equipment'" class="grid grid-cols-2 gap-3">
+          <a-form-item label="厂商" name="vendor">
+            <a-input v-model:value="formState.vendor" placeholder="设备厂商" />
+          </a-form-item>
+          <a-form-item label="型号" name="model">
+            <a-input v-model:value="formState.model" placeholder="设备型号" />
+          </a-form-item>
+        </div>
 
         <a-form-item :label="t('common.description')" name="description">
           <a-textarea v-model:value="formState.description" :placeholder="t('common.description')" :rows="4" />
@@ -130,6 +155,9 @@ interface FacilityNode {
   location?: string
   ip?: string
   mac?: string
+  vendor?: string
+  model?: string
+  equipmentType?: string
   status?: string
   children?: FacilityNode[]
 }
@@ -153,6 +181,9 @@ const formState = reactive({
   location: '',
   ip: '',
   mac: '',
+  vendor: '',
+  model: '',
+  equipmentType: '',
   status: 'active' as 'active' | 'inactive'
 })
 
@@ -167,6 +198,9 @@ const convertToTreeNode = (node: ApiFacilityNode): FacilityNode => {
     location: node.location,
     ip: node.ip,
     mac: node.mac,
+    vendor: node.vendor,
+    model: node.model,
+    equipmentType: node.equipmentType,
     status: node.status,
     children: node.children?.map(convertToTreeNode)
   }
@@ -180,7 +214,7 @@ const loadFacilities = async () => {
     treeData.value = response.data.map(convertToTreeNode)
     // 默认展开第一层
     if (treeData.value.length > 0) {
-      expandedKeys.value = [treeData.value[0].key]
+      expandedKeys.value = [treeData.value[0]!.key]
     }
   } catch (error) {
     console.error('加载设施树失败:', error)
@@ -220,10 +254,12 @@ const modalTitle = computed(() => {
   if (editingKey.value) {
     if (modalType.value === 'factory') return t('facilities.editFactory')
     if (modalType.value === 'line') return t('facilities.editLine')
+    if (modalType.value === 'equipment') return t('facilities.editEquipment')
     return t('facilities.editStation')
   }
   if (modalType.value === 'factory') return t('facilities.createFactory')
   if (modalType.value === 'line') return t('facilities.createLine')
+  if (modalType.value === 'equipment') return t('facilities.createEquipment')
   return t('facilities.createStation')
 })
 
@@ -232,21 +268,24 @@ const onExpand: TreeProps['onExpand'] = (keys) => {
 }
 
 const getTypeColor = (type: string) => {
-  if (type === 'factory') return 'bg-blue-100 text-blue-600'
-  if (type === 'line') return 'bg-green-100 text-green-600'
-  return 'bg-purple-100 text-purple-600'
+  if (type === 'factory') return 'facility-icon-factory'
+  if (type === 'line') return 'facility-icon-line'
+  if (type === 'station') return 'facility-icon-station'
+  return 'facility-icon-equipment'
 }
 
 const getTypeLabel = (type: string) => {
   if (type === 'factory') return t('facilities.factory')
   if (type === 'line') return t('facilities.line')
-  return t('facilities.station')
+  if (type === 'station') return t('facilities.station')
+  return t('facilities.equipment')
 }
 
 const getTypeIcon = (type: string) => {
   if (type === 'factory') return IconFactory
   if (type === 'line') return IconLine
-  return IconStation
+  if (type === 'station') return IconStation
+  return IconEquipment
 }
 
 const showCreateModal = (type: FacilityType, parent?: string) => {
@@ -259,6 +298,9 @@ const showCreateModal = (type: FacilityType, parent?: string) => {
   formState.location = ''
   formState.ip = ''
   formState.mac = ''
+  formState.vendor = ''
+  formState.model = ''
+  formState.equipmentType = ''
   formState.status = 'active'
   modalVisible.value = true
 }
@@ -287,6 +329,9 @@ const handleEdit = (key: string, type: FacilityType) => {
     formState.location = node.location || ''
     formState.ip = node.ip || ''
     formState.mac = node.mac || ''
+    formState.vendor = node.vendor || ''
+    formState.model = node.model || ''
+    formState.equipmentType = node.equipmentType || ''
     formState.status = (node.status as 'active' | 'inactive') || 'active'
   }
 
@@ -306,6 +351,8 @@ const handleDelete = async (key: string, type: string) => {
           await facilitiesApi.deleteFactory(key)
         } else if (type === 'line') {
           await facilitiesApi.deleteLine(key)
+        } else if (type === 'equipment') {
+          await facilitiesApi.deleteEquipment(key)
         } else {
           await facilitiesApi.deleteStation(key)
         }
@@ -328,6 +375,21 @@ const handleModalOk = async () => {
 
   try {
     if (editingKey.value) {
+      if (modalType.value === 'equipment') {
+        await facilitiesApi.updateEquipment(editingKey.value, {
+          name: formState.name,
+          code: formState.code,
+          description: formState.description,
+          status: formState.status,
+          vendor: formState.vendor,
+          model: formState.model,
+          equipmentType: formState.equipmentType
+        })
+        message.success(t('facilities.updateSuccess'))
+        modalVisible.value = false
+        await loadFacilities()
+        return
+      }
       // 更新
       if (modalType.value === 'factory') {
         await facilitiesApi.updateFactory(editingKey.value, {
@@ -378,6 +440,26 @@ const handleModalOk = async () => {
           status: formState.status
         })
       } else {
+        if (modalType.value === 'equipment') {
+          if (!parentKey.value) {
+            message.error('请选择所属工位')
+            return
+          }
+          await facilitiesApi.createEquipment({
+            stationId: parentKey.value,
+            name: formState.name,
+            code: formState.code,
+            description: formState.description,
+            status: formState.status,
+            vendor: formState.vendor,
+            model: formState.model,
+            equipmentType: formState.equipmentType
+          })
+          message.success(t('facilities.createSuccess'))
+          modalVisible.value = false
+          await loadFacilities()
+          return
+        }
         if (!parentKey.value) {
           message.error('请选择所属线体')
           return
@@ -411,24 +493,55 @@ const handleModalCancel = () => {
 // 图标组件
 const IconFactory = {
   template: `
-    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#dbeafe" d="M5 40h38v3H5z" />
+      <path fill="#94a3b8" d="M9 18l8 5v-5l8 5v-5l8 5V9h7v31H9z" />
+      <path fill="#475569" d="M9 18l8 5v17H9zM25 18l8 5v17h-8z" opacity=".28" />
+      <path fill="#2563eb" d="M34 9h6v31h-6z" />
+      <path fill="#facc15" d="M13 29h5v5h-5zM22 29h5v5h-5zM31 29h5v5h-5z" />
+      <path fill="#0f172a" d="M14 38h6v2h-6zM28 38h6v2h-6z" opacity=".22" />
     </svg>
   `
 }
 
 const IconLine = {
   template: `
-    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M4 12h16M4 17h16" />
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#dcfce7" d="M6 31h36v7H6z" />
+      <path fill="#16a34a" d="M8 28h32v5H8z" />
+      <path fill="#0f766e" d="M12 23h24l4 5H8z" />
+      <circle cx="14" cy="35" r="3" fill="#334155" />
+      <circle cx="24" cy="35" r="3" fill="#334155" />
+      <circle cx="34" cy="35" r="3" fill="#334155" />
+      <path fill="#f97316" d="M18 14h12l3 9H15z" />
+      <path fill="#fde68a" d="M20 16h8l2 5H18z" />
     </svg>
   `
 }
 
 const IconStation = {
   template: `
-    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#ede9fe" d="M10 15h28v21H10z" />
+      <path fill="#7c3aed" d="M13 12h22a3 3 0 0 1 3 3v5H10v-5a3 3 0 0 1 3-3z" />
+      <path fill="#a78bfa" d="M14 23h20v9H14z" />
+      <path fill="#1e293b" d="M16 34h16v3H16zM12 37h24v3H12z" opacity=".35" />
+      <circle cx="17" cy="16" r="1.7" fill="#fef08a" />
+      <circle cx="23" cy="16" r="1.7" fill="#bbf7d0" />
+      <circle cx="29" cy="16" r="1.7" fill="#fecaca" />
+    </svg>
+  `
+}
+
+const IconEquipment = {
+  template: `
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <rect x="13" y="9" width="22" height="30" rx="3" fill="#f59e0b" />
+      <rect x="16" y="13" width="16" height="8" rx="1.5" fill="#fef3c7" />
+      <path fill="#334155" d="M18 26h12v3H18zM18 32h8v3h-8z" />
+      <circle cx="31" cy="33.5" r="2.5" fill="#22c55e" />
+      <path fill="#94a3b8" d="M9 15h4v4H9zM9 29h4v4H9zM35 15h4v4h-4zM35 29h4v4h-4z" />
+      <path stroke="#64748b" stroke-width="2" d="M11 17h-4M11 31h-4M41 17h-4M41 31h-4" />
     </svg>
   `
 }
@@ -441,5 +554,48 @@ const IconStation = {
 
 :deep(.facility-tree .ant-tree-node-content-wrapper) {
   width: 100%;
+}
+
+.facility-node {
+  min-height: 44px;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.facility-node:hover {
+  background: #f8fafc;
+}
+
+.facility-node-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08), inset 0 0 0 1px rgb(226 232 240);
+}
+
+.facility-svg-icon {
+  width: 34px;
+  height: 34px;
+  display: block;
+}
+
+.facility-icon-factory {
+  box-shadow: 0 1px 2px rgb(37 99 235 / 0.16), inset 0 0 0 1px #bfdbfe;
+}
+
+.facility-icon-line {
+  box-shadow: 0 1px 2px rgb(22 163 74 / 0.16), inset 0 0 0 1px #bbf7d0;
+}
+
+.facility-icon-station {
+  box-shadow: 0 1px 2px rgb(124 58 237 / 0.16), inset 0 0 0 1px #ddd6fe;
+}
+
+.facility-icon-equipment {
+  box-shadow: 0 1px 2px rgb(245 158 11 / 0.16), inset 0 0 0 1px #fde68a;
 }
 </style>

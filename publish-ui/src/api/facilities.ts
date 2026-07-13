@@ -2,7 +2,7 @@ import request from '../utils/request'
 import type { ApiResponse } from '../utils/request'
 
 // 设施类型
-export type FacilityType = 'factory' | 'line' | 'station'
+export type FacilityType = 'factory' | 'line' | 'station' | 'equipment'
 
 // 设施状态
 export type FacilityStatus = 'active' | 'inactive'
@@ -18,6 +18,9 @@ export interface FacilityNode {
   status: FacilityStatus
   ip?: string
   mac?: string
+  vendor?: string
+  model?: string
+  equipmentType?: string
   createTime: string
   updateTime: string
   children?: FacilityNode[]
@@ -52,6 +55,17 @@ export interface CreateStationRequest {
   status?: FacilityStatus
 }
 
+export interface CreateEquipmentRequest {
+  stationId: string
+  name: string
+  code?: string
+  description?: string
+  equipmentType?: string
+  vendor?: string
+  model?: string
+  status?: FacilityStatus
+}
+
 // 更新请求
 export interface UpdateFactoryRequest {
   name?: string
@@ -77,10 +91,20 @@ export interface UpdateStationRequest {
   mac?: string
 }
 
+export interface UpdateEquipmentRequest {
+  name?: string
+  code?: string
+  description?: string
+  status?: FacilityStatus
+  equipmentType?: string
+  vendor?: string
+  model?: string
+}
+
 // 获取设施树
 export function getFacilitiesTree(search?: string) {
   return request<ApiResponse<FacilityNode[]>>({
-    url: '/facilities/tree',
+    url: '/publish/tree',
     method: 'get',
     params: { search }
   })
@@ -89,7 +113,7 @@ export function getFacilitiesTree(search?: string) {
 // 创建厂区
 export function createFactory(data: CreateFactoryRequest) {
   return request<ApiResponse<FacilityNode>>({
-    url: '/facilities/factory',
+    url: '/publish/factory',
     method: 'post',
     data
   })
@@ -98,7 +122,7 @@ export function createFactory(data: CreateFactoryRequest) {
 // 创建线体
 export function createLine(data: CreateLineRequest) {
   return request<ApiResponse<FacilityNode>>({
-    url: '/facilities/line',
+    url: '/publish/line',
     method: 'post',
     data
   })
@@ -107,7 +131,15 @@ export function createLine(data: CreateLineRequest) {
 // 创建工位
 export function createStation(data: CreateStationRequest) {
   return request<ApiResponse<FacilityNode>>({
-    url: '/facilities/station',
+    url: '/publish/station',
+    method: 'post',
+    data
+  })
+}
+
+export function createEquipment(data: CreateEquipmentRequest) {
+  return request<ApiResponse<FacilityNode>>({
+    url: '/publish/equipment',
     method: 'post',
     data
   })
@@ -116,7 +148,7 @@ export function createStation(data: CreateStationRequest) {
 // 更新厂区
 export function updateFactory(id: string, data: UpdateFactoryRequest) {
   return request<ApiResponse<FacilityNode>>({
-    url: `/facilities/factory/${id}`,
+    url: `/publish/nodes/${id}`,
     method: 'put',
     data
   })
@@ -125,7 +157,7 @@ export function updateFactory(id: string, data: UpdateFactoryRequest) {
 // 更新线体
 export function updateLine(id: string, data: UpdateLineRequest) {
   return request<ApiResponse<FacilityNode>>({
-    url: `/facilities/line/${id}`,
+    url: `/publish/nodes/${id}`,
     method: 'put',
     data
   })
@@ -134,7 +166,15 @@ export function updateLine(id: string, data: UpdateLineRequest) {
 // 更新工位
 export function updateStation(id: string, data: UpdateStationRequest) {
   return request<ApiResponse<FacilityNode>>({
-    url: `/facilities/station/${id}`,
+    url: `/publish/nodes/${id}`,
+    method: 'put',
+    data
+  })
+}
+
+export function updateEquipment(id: string, data: UpdateEquipmentRequest) {
+  return request<ApiResponse<FacilityNode>>({
+    url: `/publish/nodes/${id}`,
     method: 'put',
     data
   })
@@ -143,7 +183,7 @@ export function updateStation(id: string, data: UpdateStationRequest) {
 // 删除厂区
 export function deleteFactory(id: string) {
   return request<ApiResponse<null>>({
-    url: `/facilities/factory/${id}`,
+    url: `/publish/nodes/${id}`,
     method: 'delete'
   })
 }
@@ -151,7 +191,7 @@ export function deleteFactory(id: string) {
 // 删除线体
 export function deleteLine(id: string) {
   return request<ApiResponse<null>>({
-    url: `/facilities/line/${id}`,
+    url: `/publish/nodes/${id}`,
     method: 'delete'
   })
 }
@@ -159,7 +199,14 @@ export function deleteLine(id: string) {
 // 删除工位
 export function deleteStation(id: string) {
   return request<ApiResponse<null>>({
-    url: `/facilities/station/${id}`,
+    url: `/publish/nodes/${id}`,
+    method: 'delete'
+  })
+}
+
+export function deleteEquipment(id: string) {
+  return request<ApiResponse<null>>({
+    url: `/publish/nodes/${id}`,
     method: 'delete'
   })
 }
@@ -202,4 +249,3 @@ export function searchStations(params: SearchStationsParams = {}) {
     params
   })
 }
-

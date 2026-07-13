@@ -5,9 +5,9 @@ import type { ApiResponse, PageResponse } from '../utils/request'
 export type DriverType = 'java' | 'python' | 'cpp'
 
 // 驱动包状态
-export type DriverStatus = 'published' | 'unpublished' | 'testing'
+export type DriverStatus = 'pending_testing' | 'testing' | 'pending_publish' | 'pending_remove' | 'published' | 'removed'
 
-// 绑定的工位
+// 旧字段兼容：HAL 驱动包不再绑定设备
 export interface BoundStation {
   id: string
   name: string
@@ -37,6 +37,10 @@ export interface DriverPackage {
   apiDocUrl?: string
   readme?: string
   publishTime?: string
+  deleted?: 0 | 1
+  locked?: boolean
+  storageProvider?: string
+  storagePath?: string
 }
 
 // 驱动包列表查询参数
@@ -51,19 +55,12 @@ export interface DriverListParams {
 // 上传驱动包参数
 export interface UploadDriverParams {
   file: File
-  type: DriverType
-  name: string
-  version: string
-  description?: string
-  protocol?: string
-  manufacturer?: string
-  deviceModel?: string
 }
 
 // 获取驱动包列表
 export function getDriverPackages(params: DriverListParams) {
   return request<ApiResponse<PageResponse<DriverPackage>>>({
-    url: '/drivers/packages',
+    url: '/publish/drivers/packages',
     method: 'get',
     params
   })
@@ -73,16 +70,9 @@ export function getDriverPackages(params: DriverListParams) {
 export function uploadDriverPackage(params: UploadDriverParams) {
   const formData = new FormData()
   formData.append('file', params.file)
-  formData.append('type', params.type)
-  formData.append('name', params.name)
-  formData.append('version', params.version)
-  if (params.description) formData.append('description', params.description)
-  if (params.protocol) formData.append('protocol', params.protocol)
-  if (params.manufacturer) formData.append('manufacturer', params.manufacturer)
-  if (params.deviceModel) formData.append('deviceModel', params.deviceModel)
 
   return request<ApiResponse<DriverPackage>>({
-    url: '/drivers/packages/upload',
+    url: '/publish/drivers/packages/upload',
     method: 'post',
     data: formData,
     headers: {
@@ -91,34 +81,51 @@ export function uploadDriverPackage(params: UploadDriverParams) {
   })
 }
 
-// 发布驱动包
-export function publishDriverPackage(id: string) {
+export function replaceDriverPackage(id: string, file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
   return request<ApiResponse<DriverPackage>>({
-    url: `/drivers/packages/${id}/publish`,
+    url: `/publish/drivers/packages/${id}/upload`, method: 'put', data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export function deleteDriverPackage(id: string) {
+  return request<ApiResponse<null>>({ url: `/publish/drivers/packages/${id}`, method: 'delete' })
+}
+
+export function submitDriverTesting(id: string) {
+  return request<ApiResponse<DriverPackage>>({
+    url: `/publish/drivers/packages/${id}/submit-testing`,
     method: 'post'
   })
 }
 
-// 下架驱动包
-export function unpublishDriverPackage(id: string) {
+export function submitDriverPublish(id: string) {
   return request<ApiResponse<DriverPackage>>({
-    url: `/drivers/packages/${id}/unpublish`,
+    url: `/publish/drivers/packages/${id}/submit-publish`,
     method: 'post'
   })
 }
 
-// 撤回驱动包
-export function recallDriverPackage(id: string) {
+export function submitDriverRemove(id: string) {
+  return request<ApiResponse<DriverPackage>>({
+    url: `/publish/drivers/packages/${id}/submit-remove`,
+    method: 'post'
+  })
+}
+
+export function rejectDriverPackage(id: string) {
   return request<ApiResponse<null>>({
-    url: `/drivers/packages/${id}/recall`,
-    method: 'delete'
+    url: `/publish/drivers/packages/${id}/reject`,
+    method: 'post'
   })
 }
 
 // 下载驱动包
 export function downloadDriverPackage(id: string) {
   return request({
-    url: `/drivers/packages/${id}/download`,
+    url: `/publish/drivers/packages/${id}/download`,
     method: 'get',
     responseType: 'blob'
   })
@@ -127,8 +134,7 @@ export function downloadDriverPackage(id: string) {
 // 获取驱动包详情
 export function getDriverPackageDetail(id: string) {
   return request<ApiResponse<DriverPackage>>({
-    url: `/drivers/packages/${id}`,
+    url: `/publish/drivers/packages/${id}`,
     method: 'get'
   })
 }
-

@@ -2,7 +2,7 @@
 数据库模型
 """
 from app.models.user import User, Role
-from app.models.facility import Factory, Line, Station
+from app.models.facility import Factory, Line, Station, Equipment
 from app.models.package import AutoUnitPackage, DriverPackage
 from app.models.interface import Interface
 from app.models.deployment import DeploymentManifest
@@ -12,6 +12,7 @@ from app.models.binding import (
     ManifestStationBinding,
 )
 from app.models.log import OperationLog
+from app.models.publish import EquipmentAutoUnitBinding, EquipmentBindingHistory, PublishApproval
 
 __all__ = [
     "User",
@@ -19,6 +20,7 @@ __all__ = [
     "Factory",
     "Line",
     "Station",
+    "Equipment",
     "AutoUnitPackage",
     "DriverPackage",
     "Interface",
@@ -27,5 +29,7 @@ __all__ = [
     "InterfaceStationBinding",
     "ManifestStationBinding",
     "OperationLog",
+    "EquipmentAutoUnitBinding",
+    "EquipmentBindingHistory",
+    "PublishApproval",
 ]
-

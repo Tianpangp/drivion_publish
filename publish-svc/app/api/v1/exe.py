@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
@@ -41,8 +40,6 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback
 
 
 router = APIRouter()
-DEMO_STATION_ID = "demo-station"
-DEMO_MANIFEST_PATH = Path(__file__).resolve().parents[2] / "data" / "demo_manifest.toml"
 
 
 @router.get(
@@ -54,9 +51,6 @@ async def get_station_bundle(
     station_id: str,
 ):
     """返回工控机启动/同步所需的当前部署聚合视图。"""
-    if station_id == DEMO_STATION_ID:
-        return Response(code=200, message="获取成功", data=_demo_bundle())
-
     async with AsyncSessionLocal() as db:
         return Response(
             code=200,
@@ -104,88 +98,6 @@ async def _build_db_bundle(station_id: str, db: AsyncSession) -> ExeBundleRespon
     )
 
     return bundle
-
-
-def _demo_bundle() -> ExeBundleResponse:
-    content = DEMO_MANIFEST_PATH.read_text(encoding="utf-8")
-    return ExeBundleResponse(
-        station=ExeStationInfo(
-            id=DEMO_STATION_ID,
-            name="Demo Station",
-            code="DEMO-001",
-            path="Demo Factory / Demo Line / Demo Station",
-            ip="127.0.0.1",
-            mac="00:00:00:00:00:00",
-        ),
-        manifest=ExeDeploymentManifestInfo(
-            id="mf-demo",
-            name="Publish Demo MVP",
-            version="0.1.0",
-            fileName="demo_manifest.toml",
-            size=len(content.encode("utf-8")),
-            md5=None,
-            status="published",
-            downloadApiPath="/publish/api/v1/exe/stations/demo-station/bundle",
-            content=content,
-            metadata={"description": "No-DB demo manifest for local MVP smoke tests"},
-        ),
-        autoUnits=[
-            ExeArtifactInfo(
-                id="au-demo",
-                name="demo-autounit-package",
-                version="0.1.0",
-                fileName="demo-autounit.zip",
-                size=0,
-                md5=None,
-                sha256=None,
-                status="published",
-                downloadApiPath=None,
-                metadata={"mode": "embedded-in-demo-manifest"},
-            )
-        ],
-        drivers=[
-            ExeArtifactInfo(
-                id="drv-virtual-motion",
-                name="virtual-motion-driver",
-                version="0.1.0",
-                fileName="virtual-motion-driver.zip",
-                size=0,
-                status="published",
-                metadata={"type": "python", "protocol": "virtual"},
-            ),
-            ExeArtifactInfo(
-                id="drv-virtual-io",
-                name="virtual-io-driver",
-                version="0.1.0",
-                fileName="virtual-io-driver.zip",
-                size=0,
-                status="published",
-                metadata={"type": "python", "protocol": "virtual"},
-            ),
-            ExeArtifactInfo(
-                id="drv-virtual-camera",
-                name="virtual-camera-driver",
-                version="0.1.0",
-                fileName="virtual-camera-driver.zip",
-                size=0,
-                status="published",
-                metadata={"type": "python", "protocol": "virtual"},
-            ),
-        ],
-        interfaces=[
-            ExeArtifactInfo(
-                id="ui-demo",
-                name="Demo Operator UI",
-                version="0.1.0",
-                fileName="demo-ui.json",
-                size=0,
-                status="published",
-                metadata={"description": "Exe built-in UI is used for demo"},
-            )
-        ],
-        generatedAt=datetime.utcnow().isoformat(),
-        warnings=["demo-station 使用内置演示数据，不访问 MySQL/MinIO"],
-    )
 
 
 async def _get_station_info(station_id: str, db: AsyncSession) -> ExeStationInfo | None:

@@ -2,10 +2,10 @@ import request from '../utils/request'
 import type { ApiResponse, PageResponse } from '../utils/request'
 
 // AutoUnit 包状态
-export type AutoUnitStatus = 'published' | 'unpublished' | 'testing'
+export type AutoUnitStatus = 'pending_testing' | 'testing' | 'pending_publish' | 'pending_remove' | 'published' | 'removed'
 
-// 绑定的工位
-export interface BoundStation {
+// 绑定的设备
+export interface BoundEquipment {
   id: string
   name: string
   code: string
@@ -15,14 +15,16 @@ export interface BoundStation {
 export interface AutoUnitPackage {
   id: string
   name: string
+  packageId?: string
   fileName: string
   version: string
+  module?: string
   size: number
   uploadTime: string
   uploadUser: string
   status: AutoUnitStatus
   description?: string
-  boundStations: BoundStation[]
+  boundStations: BoundEquipment[]
   dependencies: string[]
   pythonVersion: string
   downloadCount: number
@@ -32,6 +34,10 @@ export interface AutoUnitPackage {
   changelog?: string
   publishTime?: string
   publishUser?: string
+  deleted?: 0 | 1
+  locked?: boolean
+  storageProvider?: string
+  storagePath?: string
 }
 
 // AutoUnit 包列表查询参数
@@ -45,16 +51,12 @@ export interface AutoUnitListParams {
 // 上传 AutoUnit 包参数
 export interface UploadAutoUnitParams {
   file: File
-  name: string
-  version: string
-  description?: string
-  pythonVersion?: string
 }
 
 // 获取 AutoUnit 包列表
 export function getAutoUnitPackages(params: AutoUnitListParams) {
   return request<ApiResponse<PageResponse<AutoUnitPackage>>>({
-    url: '/autounit/packages',
+    url: '/publish/autounit/packages',
     method: 'get',
     params
   })
@@ -64,13 +66,9 @@ export function getAutoUnitPackages(params: AutoUnitListParams) {
 export function uploadAutoUnitPackage(params: UploadAutoUnitParams) {
   const formData = new FormData()
   formData.append('file', params.file)
-  formData.append('name', params.name)
-  formData.append('version', params.version)
-  if (params.description) formData.append('description', params.description)
-  if (params.pythonVersion) formData.append('pythonVersion', params.pythonVersion)
 
   return request<ApiResponse<AutoUnitPackage>>({
-    url: '/autounit/packages/upload',
+    url: '/publish/autounit/packages/upload',
     method: 'post',
     data: formData,
     headers: {
@@ -79,27 +77,51 @@ export function uploadAutoUnitPackage(params: UploadAutoUnitParams) {
   })
 }
 
-// 更新 AutoUnit 包状态
-export function updateAutoUnitStatus(id: string, status: AutoUnitStatus) {
+export function replaceAutoUnitPackage(id: string, file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
   return request<ApiResponse<AutoUnitPackage>>({
-    url: `/autounit/packages/${id}/status`,
-    method: 'put',
-    data: { status }
+    url: `/publish/autounit/packages/${id}/upload`, method: 'put', data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
 
-// 撤回 AutoUnit 包
-export function recallAutoUnitPackage(id: string) {
+export function deleteAutoUnitPackage(id: string) {
+  return request<ApiResponse<null>>({ url: `/publish/autounit/packages/${id}`, method: 'delete' })
+}
+
+export function submitAutoUnitTesting(id: string) {
+  return request<ApiResponse<AutoUnitPackage>>({
+    url: `/publish/autounit/packages/${id}/submit-testing`,
+    method: 'post'
+  })
+}
+
+export function submitAutoUnitPublish(id: string) {
+  return request<ApiResponse<AutoUnitPackage>>({
+    url: `/publish/autounit/packages/${id}/submit-publish`,
+    method: 'post'
+  })
+}
+
+export function submitAutoUnitRemove(id: string) {
+  return request<ApiResponse<AutoUnitPackage>>({
+    url: `/publish/autounit/packages/${id}/submit-remove`,
+    method: 'post'
+  })
+}
+
+export function rejectAutoUnitPackage(id: string) {
   return request<ApiResponse<null>>({
-    url: `/autounit/packages/${id}/recall`,
-    method: 'delete'
+    url: `/publish/autounit/packages/${id}/reject`,
+    method: 'post'
   })
 }
 
 // 下载 AutoUnit 包
 export function downloadAutoUnitPackage(id: string) {
   return request({
-    url: `/autounit/packages/${id}/download`,
+    url: `/publish/autounit/packages/${id}/download`,
     method: 'get',
     responseType: 'blob'
   })
@@ -108,7 +130,7 @@ export function downloadAutoUnitPackage(id: string) {
 // 获取 AutoUnit 包详情
 export function getAutoUnitPackageDetail(id: string) {
   return request<ApiResponse<AutoUnitPackage>>({
-    url: `/autounit/packages/${id}`,
+    url: `/publish/autounit/packages/${id}`,
     method: 'get'
   })
 }
@@ -130,4 +152,3 @@ export function cancelAutoUnitFromStations(id: string, stationIds: string[]) {
     data: { stationIds }
   })
 }
-

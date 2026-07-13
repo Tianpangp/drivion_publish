@@ -25,6 +25,9 @@
           <a-select-option value="upload">上传</a-select-option>
           <a-select-option value="bind">绑定</a-select-option>
           <a-select-option value="unbind">解绑</a-select-option>
+          <a-select-option value="submit">提交审批</a-select-option>
+          <a-select-option value="approve">审批通过</a-select-option>
+          <a-select-option value="reject">驳回</a-select-option>
         </a-select>
 
         <a-select v-model:value="filters.result" placeholder="操作结果" allow-clear @change="loadLogs">
@@ -36,8 +39,12 @@
           <a-select-option value="厂区管理">厂区管理</a-select-option>
           <a-select-option value="线体管理">线体管理</a-select-option>
           <a-select-option value="工位管理">工位管理</a-select-option>
+          <a-select-option value="设备管理">设备管理</a-select-option>
+          <a-select-option value="现场结构">现场结构</a-select-option>
+          <a-select-option value="设备绑定">设备绑定</a-select-option>
           <a-select-option value="驱动包管理">驱动包管理</a-select-option>
           <a-select-option value="AutoUnit包">AutoUnit包</a-select-option>
+          <a-select-option value="审批管理">审批管理</a-select-option>
           <a-select-option value="界面管理">界面管理</a-select-option>
           <a-select-option value="部署清单管理">部署清单管理</a-select-option>
         </a-select>
@@ -214,7 +221,10 @@ const getOperationName = (operation: string) => {
     delete: '删除',
     upload: '上传',
     bind: '绑定',
-    unbind: '解绑'
+    unbind: '解绑',
+    submit: '提交审批',
+    approve: '审批通过',
+    reject: '驳回'
   }
   return names[operation] || operation
 }
