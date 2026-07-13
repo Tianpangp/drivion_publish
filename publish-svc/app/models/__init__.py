@@ -1,7 +1,7 @@
 """
 数据库模型
 """
-from app.models.user import User, Role
+from app.models.user import User, Role, RoleRequest
 from app.models.facility import Factory, Line, Station, Equipment
 from app.models.package import AutoUnitPackage, DriverPackage
 from app.models.interface import Interface
@@ -17,6 +17,7 @@ from app.models.publish import EquipmentAutoUnitBinding, EquipmentBindingHistory
 __all__ = [
     "User",
     "Role",
+    "RoleRequest",
     "Factory",
     "Line",
     "Station",

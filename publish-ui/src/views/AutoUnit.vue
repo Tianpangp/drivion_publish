@@ -6,7 +6,7 @@
         <h1 class="text-2xl font-bold text-gray-800">{{ t('autounit.title') }}</h1>
         <p class="text-gray-500 mt-1">上传、审批和管理设备执行逻辑包，AutoUnit 最终绑定到具体设备</p>
       </div>
-      <a-button type="primary" @click="showUploadModal()">
+      <a-button v-if="canManage" type="primary" @click="showUploadModal()">
         <template #icon>
           <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -98,20 +98,20 @@
           </div>
 
           <div class="flex gap-2 pt-4 border-t">
-            <a-button v-if="pkg.status === 'pending_testing'" size="small" type="primary"
+            <a-button v-if="canSubmitTest && pkg.status === 'pending_testing'" size="small" type="primary"
               @click="handleSubmitTesting(pkg.id)">
               提交测试
             </a-button>
-            <a-button v-if="pkg.status === 'pending_testing'" size="small" @click="showUploadModal(pkg.id)">更新</a-button>
-            <a-button v-if="pkg.status === 'pending_testing'" size="small" danger @click="handleDelete(pkg.id)">删除</a-button>
-            <a-button v-if="pkg.status === 'testing' || pkg.status === 'removed'" size="small" type="primary"
+            <a-button v-if="canManage && pkg.status === 'pending_testing'" size="small" @click="showUploadModal(pkg.id)">更新</a-button>
+            <a-button v-if="canManage && pkg.status === 'pending_testing'" size="small" danger @click="handleDelete(pkg.id)">删除</a-button>
+            <a-button v-if="canSubmitPublish && (pkg.status === 'testing' || pkg.status === 'removed')" size="small" type="primary"
               @click="handleSubmitPublish(pkg.id)">
               {{ pkg.status === 'removed' ? '重新上架' : '提交发布' }}
             </a-button>
             <a-button size="small" @click="handleDownload(pkg.id, pkg.fileName)">
               {{ t('common.download') }}
             </a-button>
-            <a-button v-if="pkg.status === 'published'" size="small" danger @click="handleSubmitRemove(pkg.id)">
+            <a-button v-if="canSubmitRemove && pkg.status === 'published'" size="small" danger @click="handleSubmitRemove(pkg.id)">
               申请下架
             </a-button>
             <a-button v-if="canReject(pkg.status)" size="small" danger @click="handleReject(pkg.id)">
@@ -152,14 +152,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
 import type { UploadProps } from 'ant-design-vue'
 import * as autounitApi from '../api/autounit'
 import type { AutoUnitPackage, AutoUnitStatus } from '../api/autounit'
+import { useUserStore } from '../stores/user'
 
 const { t } = useI18n()
+const userStore = useUserStore()
+const canManage = computed(() => userStore.hasPermission('autounit:manage_draft'))
+const canSubmitTest = computed(() => userStore.hasPermission('autounit:submit_test'))
+const canSubmitPublish = computed(() => userStore.hasPermission('autounit:submit_publish'))
+const canSubmitRemove = computed(() => userStore.hasPermission('autounit:submit_remove'))
 
 const loading = ref(false)
 const uploadModalVisible = ref(false)
@@ -209,7 +215,7 @@ const getStatusColor = (status: string) => {
 }
 
 const canReject = (status: string) => {
-  return ['testing', 'pending_publish'].includes(status)
+  return canManage.value && ['testing', 'pending_publish'].includes(status)
 }
 
 const getStatusName = (status: string) => {

@@ -46,6 +46,21 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  const clearLocal = () => {
+    user.value = null
+    token.value = null
+    permissions.value = []
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    localStorage.removeItem('tokenExpires')
+  }
+
+  const setUser = (value: UserInfo) => {
+    user.value = value
+    permissions.value = value.permissions
+    localStorage.setItem('user', JSON.stringify(value))
+  }
+
   // 加载用户信息
   const loadUser = async () => {
     const storedUser = localStorage.getItem('user')
@@ -104,6 +119,8 @@ export const useUserStore = defineStore('user', () => {
     permissions,
     login,
     logout,
+    clearLocal,
+    setUser,
     loadUser,
     isAdmin,
     hasPermission,

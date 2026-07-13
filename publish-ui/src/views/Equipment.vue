@@ -5,7 +5,7 @@
         <h1 class="text-2xl font-bold text-gray-800">设备绑定</h1>
         <p class="text-gray-500 mt-1">按设备实例维护 AutoUnit 绑定关系，设备归属路径为厂区 / 线体 / 工位 / 设备</p>
       </div>
-      <a-button type="primary" :disabled="!activeEquipment" @click="showBindingDrawer(activeEquipment)">
+      <a-button v-if="canBind" type="primary" :disabled="!activeEquipment" @click="showBindingDrawer(activeEquipment)">
         绑定 AutoUnit
       </a-button>
     </div>
@@ -43,7 +43,7 @@
               <h2 class="text-xl font-semibold text-gray-900 mt-1">{{ activeEquipment.name }}</h2>
               <div class="text-sm text-gray-500 mt-2">{{ activeEquipment.path }}</div>
             </div>
-            <a-space>
+            <a-space v-if="canBind">
               <a-button @click="showBindingDrawer(activeEquipment)">替换版本</a-button>
               <a-button danger @click="unbind(activeEquipment)">解绑</a-button>
             </a-space>
@@ -167,6 +167,10 @@ import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import * as publishApi from '../api/publish'
 import type { AutoUnitBinding, EquipmentRow, PackageStatus } from '../api/publish'
+import { useUserStore } from '../stores/user'
+
+const userStore = useUserStore()
+const canBind = computed(() => userStore.hasPermission('binding:autounit:manage'))
 
 const equipmentRows = ref<EquipmentRow[]>([])
 const packageOptions = ref<AutoUnitBinding[]>([])

@@ -69,14 +69,14 @@ async def get_current_user(
     
     if not user_role:
         if user_id in {"mock-admin", "mock-user"}:
-            role_code = "admin" if user_id == "mock-admin" else "developer"
+            role_code = "admin" if user_id == "mock-admin" else "viewer"
             user = User(
                 id=user_id,
                 username="admin" if user_id == "mock-admin" else "user",
                 password="",
                 nickname="admin" if user_id == "mock-admin" else "user",
                 email=f"{user_id}@local.test",
-                role=1,
+                role=1 if role_code == "admin" else 6,
                 status="active",
             )
             user.role_code = role_code

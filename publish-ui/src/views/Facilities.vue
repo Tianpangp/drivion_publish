@@ -7,7 +7,7 @@
         <p class="text-gray-500 mt-1">管理厂区、线体、工位和设备的四级结构</p>
       </div>
       <div class="flex gap-3">
-        <a-button @click="showCreateModal('factory')">
+        <a-button v-if="canCreate('factory')" @click="showCreateModal('factory')">
           <template #icon>
             <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -48,19 +48,19 @@
                 </div>
               </div>
               <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <a-button v-if="type === 'factory'" size="small" type="link" @click.stop="showCreateModal('line', key)">
+                <a-button v-if="type === 'factory' && canCreate('line')" size="small" type="link" @click.stop="showCreateModal('line', key)">
                   添加线体
                 </a-button>
-                <a-button v-if="type === 'line'" size="small" type="link" @click.stop="showCreateModal('station', key)">
+                <a-button v-if="type === 'line' && canCreate('station')" size="small" type="link" @click.stop="showCreateModal('station', key)">
                   添加工位
                 </a-button>
-                <a-button v-if="type === 'station'" size="small" type="link" @click.stop="showCreateModal('equipment', key)">
+                <a-button v-if="type === 'station' && canCreate('equipment')" size="small" type="link" @click.stop="showCreateModal('equipment', key)">
                   添加设备
                 </a-button>
-                <a-button size="small" type="link" @click.stop="handleEdit(key, type)">
+                <a-button v-if="canEdit(type)" size="small" type="link" @click.stop="handleEdit(key, type)">
                   {{ t('common.edit') }}
                 </a-button>
-                <a-button size="small" type="link" danger @click.stop="handleDelete(key, type)">
+                <a-button v-if="canDelete(type)" size="small" type="link" danger @click.stop="handleDelete(key, type)">
                   {{ t('common.delete') }}
                 </a-button>
               </div>
@@ -143,8 +143,26 @@ import { message, Modal } from 'ant-design-vue'
 import type { TreeProps } from 'ant-design-vue'
 import * as facilitiesApi from '../api/facilities'
 import type { FacilityNode as ApiFacilityNode, FacilityType } from '../api/facilities'
+import { useUserStore } from '../stores/user'
 
 const { t } = useI18n()
+const userStore = useUserStore()
+
+const permissionPrefix: Record<FacilityType, string> = {
+  factory: 'facility:factory',
+  line: 'facility:line',
+  station: 'facility:station',
+  equipment: 'facility:equipment'
+}
+const canCreate = (type: FacilityType) => type === 'equipment'
+  ? userStore.hasPermission('facility:equipment:manage')
+  : userStore.hasPermission(`${permissionPrefix[type]}:create`)
+const canEdit = (type: FacilityType) => type === 'equipment'
+  ? userStore.hasPermission('facility:equipment:manage')
+  : userStore.hasPermission(`${permissionPrefix[type]}:edit`)
+const canDelete = (type: FacilityType) => type === 'equipment'
+  ? userStore.hasPermission('facility:equipment:manage')
+  : userStore.hasPermission(`${permissionPrefix[type]}:delete`)
 
 interface FacilityNode {
   key: string

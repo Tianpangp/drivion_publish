@@ -5,7 +5,7 @@
         <h1 class="text-2xl font-bold text-gray-800">{{ t('drivers.title') }}</h1>
         <p class="text-gray-500 mt-1">上传、审批和管理 HAL 驱动包版本；HAL 由 AutoUnit 在 Exe 中调用</p>
       </div>
-      <a-button type="primary" @click="showUploadModal()">{{ t('drivers.upload') }}</a-button>
+      <a-button v-if="canManage" type="primary" @click="showUploadModal()">{{ t('drivers.upload') }}</a-button>
     </div>
 
     <div class="bg-white rounded-xl p-4 shadow-sm">
@@ -62,14 +62,14 @@
           </div>
 
           <div class="flex flex-wrap gap-2 pt-4 border-t">
-            <a-button v-if="pkg.status === 'pending_testing'" size="small" type="primary" @click="handleSubmitTesting(pkg.id)">提交测试</a-button>
-            <a-button v-if="pkg.status === 'pending_testing'" size="small" @click="showUploadModal(pkg.id)">更新</a-button>
-            <a-button v-if="pkg.status === 'pending_testing'" size="small" danger @click="handleDelete(pkg.id)">删除</a-button>
-            <a-button v-if="pkg.status === 'testing' || pkg.status === 'removed'" size="small" type="primary" @click="handleSubmitPublish(pkg.id)">
+            <a-button v-if="canSubmitTest && pkg.status === 'pending_testing'" size="small" type="primary" @click="handleSubmitTesting(pkg.id)">提交测试</a-button>
+            <a-button v-if="canManage && pkg.status === 'pending_testing'" size="small" @click="showUploadModal(pkg.id)">更新</a-button>
+            <a-button v-if="canManage && pkg.status === 'pending_testing'" size="small" danger @click="handleDelete(pkg.id)">删除</a-button>
+            <a-button v-if="canSubmitPublish && (pkg.status === 'testing' || pkg.status === 'removed')" size="small" type="primary" @click="handleSubmitPublish(pkg.id)">
               {{ pkg.status === 'removed' ? '重新上架' : '提交发布' }}
             </a-button>
             <a-button size="small" @click="handleDownload(pkg.id, pkg.fileName)">{{ t('common.download') }}</a-button>
-            <a-button v-if="pkg.status === 'published'" size="small" danger @click="handleSubmitRemove(pkg.id)">申请下架</a-button>
+            <a-button v-if="canSubmitRemove && pkg.status === 'published'" size="small" danger @click="handleSubmitRemove(pkg.id)">申请下架</a-button>
             <a-button v-if="canReject(pkg.status)" size="small" danger @click="handleReject(pkg.id)">退回待测试</a-button>
           </div>
         </div>
@@ -101,14 +101,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { message, Modal } from 'ant-design-vue'
 import type { UploadProps } from 'ant-design-vue'
 import * as driversApi from '../api/drivers'
 import type { DriverPackage, DriverStatus } from '../api/drivers'
+import { useUserStore } from '../stores/user'
 
 const { t } = useI18n()
+const userStore = useUserStore()
+const canManage = computed(() => userStore.hasPermission('driver:manage_draft'))
+const canSubmitTest = computed(() => userStore.hasPermission('driver:submit_test'))
+const canSubmitPublish = computed(() => userStore.hasPermission('driver:submit_publish'))
+const canSubmitRemove = computed(() => userStore.hasPermission('driver:submit_remove'))
 
 const loading = ref(false)
 const uploadModalVisible = ref(false)
@@ -153,7 +159,7 @@ const getStatusColor = (status: string) => {
 }
 
 const canReject = (status: string) => {
-  return ['testing', 'pending_publish'].includes(status)
+  return canManage.value && ['testing', 'pending_publish'].includes(status)
 }
 
 const getStatusName = (status: string) => t(`drivers.${status}`)

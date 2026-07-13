@@ -10,7 +10,6 @@ class RegisterRequest(BaseModel):
     """注册请求"""
     username: str = Field(..., min_length=3, max_length=32, description="用户名，3-32个字符")
     password: str = Field(..., min_length=6, max_length=32, description="密码，6-32个字符")
-    role: str = Field(..., description="角色代码（如：admin, developer, operator等）")
     nickname: Optional[str] = Field(None, max_length=64, description="昵称")
     email: Optional[EmailStr] = Field(None, description="邮箱地址")
     
@@ -79,3 +78,30 @@ class LoginResponse(BaseModel):
     code: int = 200
     message: str = "登录成功"
     data: TokenData
+
+
+class RoleChangeRequest(BaseModel):
+    role: str
+
+
+class RoleApplyRequest(BaseModel):
+    role: str
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+class RoleReviewRequest(BaseModel):
+    comment: Optional[str] = Field(None, max_length=500)
+
+
+class ProfileUpdateRequest(BaseModel):
+    nickname: Optional[str] = Field(None, max_length=64)
+    email: Optional[EmailStr] = None
+
+
+class PasswordChangeRequest(BaseModel):
+    oldPassword: str
+    newPassword: str = Field(..., min_length=6, max_length=32)
+
+
+class AccountDeleteRequest(BaseModel):
+    password: str

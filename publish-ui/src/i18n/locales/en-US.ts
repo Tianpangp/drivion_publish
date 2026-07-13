@@ -27,6 +27,7 @@ export default {
     autounit: 'AutoUnit',
     approvals: 'Approvals',
     logs: 'Logs',
+    users: 'Users',
     logout: 'Logout',
     profile: 'Profile',
     settings: 'Settings'
@@ -151,6 +152,11 @@ export default {
   user: {
     admin: 'Admin',
     user: 'User',
+    developer: 'Developer',
+    tester: 'Tester',
+    release_manager: 'Release Manager',
+    engineer: 'Engineer',
+    viewer: 'Viewer',
     role: 'Role'
   }
 }

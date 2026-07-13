@@ -40,12 +40,12 @@
             </div>
             <div class="text-sm">
               <div class="text-gray-800 font-medium">{{ userStore.user?.username }}</div>
-              <div class="text-gray-500 text-xs">{{ t(`user.${userStore.user?.role}`) }}</div>
+              <div class="text-gray-500 text-xs">{{ roleLabels[userStore.user?.role || 'viewer'] }}</div>
             </div>
           </div>
           <template #overlay>
             <a-menu>
-              <a-menu-item key="profile">
+              <a-menu-item key="profile" @click="router.push('/profile')">
                 <div class="flex items-center gap-2">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -110,7 +110,7 @@ const userStore = useUserStore()
 
 const currentLocale = computed(() => locale.value)
 
-const menuItems = [
+const rawMenuItems = [
   {
     name: 'equipment',
     path: '/equipment',
@@ -134,14 +134,25 @@ const menuItems = [
   {
     name: 'approvals',
     path: '/approvals',
-    icon: 'approval'
+    icon: 'approval',
+    permissions: ['approval:test:view', 'approval:release:view']
   },
   {
     name: 'logs',
     path: '/logs',
-    icon: 'log'
+    icon: 'log',
+    permissions: ['log:view']
+  },
+  {
+    name: 'users',
+    path: '/users',
+    icon: 'users',
+    permissions: ['user:manage']
   }
 ] as const
+
+const menuItems = computed(() => rawMenuItems.filter(item => !('permissions' in item) || userStore.hasAnyPermission([...item.permissions])))
+const roleLabels: Record<string, string> = { admin: '系统管理员', developer: '开发人员', tester: '测试人员', release_manager: '发布管理员', engineer: '现场工程师', viewer: '查看人员' }
 
 const isActive = (path: string) => {
   return route.path === path
@@ -208,12 +219,17 @@ const IconLog = {
   `
 }
 
+const IconUsers = {
+  template: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H2v-2a4 4 0 014-4h3m4-4a4 4 0 10-8 0 4 4 0 008 0zm8 0a3 3 0 11-6 0 3 3 0 016 0z" /></svg>`
+}
+
 const registeredIcons = {
   equipment: IconEquipment,
   factory: IconFactory,
   driver: IconDriver,
   package: IconPackage,
   approval: IconApproval,
-  log: IconLog
+  log: IconLog,
+  users: IconUsers
 }
 </script>

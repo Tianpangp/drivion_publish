@@ -39,6 +39,8 @@ class Permission(str, Enum):
     FACILITY_STATION_CREATE = "facility:station:create"      # 创建工位
     FACILITY_STATION_EDIT = "facility:station:edit"          # 编辑工位
     FACILITY_STATION_DELETE = "facility:station:delete"      # 删除工位
+    FACILITY_EQUIPMENT_VIEW = "facility:equipment:view"
+    FACILITY_EQUIPMENT_MANAGE = "facility:equipment:manage"
     
     # ========== AutoUnit 包管理权限 ==========
     AUTOUNIT_VIEW = "autounit:view"                          # 查看 AutoUnit 包
@@ -48,6 +50,10 @@ class Permission(str, Enum):
     AUTOUNIT_PUBLISH = "autounit:publish"                    # 发布 AutoUnit 包
     AUTOUNIT_RECALL = "autounit:recall"                      # 撤回 AutoUnit 包
     AUTOUNIT_APPLY = "autounit:apply"                        # 应用 AutoUnit 包到工位
+    AUTOUNIT_MANAGE_DRAFT = "autounit:manage_draft"
+    AUTOUNIT_SUBMIT_TEST = "autounit:submit_test"
+    AUTOUNIT_SUBMIT_PUBLISH = "autounit:submit_publish"
+    AUTOUNIT_SUBMIT_REMOVE = "autounit:submit_remove"
     
     # ========== 驱动包管理权限 ==========
     DRIVER_VIEW = "driver:view"                              # 查看驱动包
@@ -57,6 +63,16 @@ class Permission(str, Enum):
     DRIVER_PUBLISH = "driver:publish"                        # 发布驱动包
     DRIVER_UNPUBLISH = "driver:unpublish"                    # 下架驱动包
     DRIVER_RECALL = "driver:recall"                          # 撤回驱动包
+    DRIVER_MANAGE_DRAFT = "driver:manage_draft"
+    DRIVER_SUBMIT_TEST = "driver:submit_test"
+    DRIVER_SUBMIT_PUBLISH = "driver:submit_publish"
+    DRIVER_SUBMIT_REMOVE = "driver:submit_remove"
+
+    APPROVAL_TEST_VIEW = "approval:test:view"
+    APPROVAL_TEST_REVIEW = "approval:test:review"
+    APPROVAL_RELEASE_VIEW = "approval:release:view"
+    APPROVAL_RELEASE_REVIEW = "approval:release:review"
+    BINDING_AUTOUNIT_MANAGE = "binding:autounit:manage"
     
     # ========== 界面管理权限 ==========
     INTERFACE_VIEW = "interface:view"                        # 查看界面
@@ -91,6 +107,8 @@ class Permission(str, Enum):
     USER_DELETE = "user:delete"                              # 删除用户
     USER_ASSIGN_ROLE = "user:assign_role"                    # 分配角色
     USER_ASSIGN_PERMISSION = "user:assign_permission"        # 分配权限
+    USER_ROLE_REQUEST = "user:role_request"
+    USER_MANAGE = "user:manage"
     
     # ========== 系统管理权限 ==========
     SYSTEM_CONFIG = "system:config"                          # 系统配置
@@ -255,6 +273,9 @@ class RoleType(str, Enum):
     PROJECT_MANAGER = "project_manager"  # 项目经理
     OPERATOR = "operator"                # 操作员
     PROCESS_ENGINEER = "process_engineer"  # 工艺工程师
+    RELEASE_MANAGER = "release_manager"
+    ENGINEER = "engineer"
+    VIEWER = "viewer"
 
 
 # 角色权限映射
@@ -452,6 +473,43 @@ ROLE_DESCRIPTIONS: Dict[RoleType, str] = {
     RoleType.PROCESS_ENGINEER: "工艺工程师 - 负责工艺参数与流程维护,可配置界面和编辑设施",
 }
 
+# 发布系统内置角色。旧角色权限保留给兼容接口，新主流程只分配以下角色。
+_PUBLISH_VIEW = {
+    Permission.FACILITY_FACTORY_VIEW, Permission.FACILITY_LINE_VIEW,
+    Permission.FACILITY_STATION_VIEW, Permission.FACILITY_EQUIPMENT_VIEW,
+    Permission.AUTOUNIT_VIEW, Permission.AUTOUNIT_DOWNLOAD,
+    Permission.DRIVER_VIEW, Permission.DRIVER_DOWNLOAD,
+    Permission.BINDING_VIEW, Permission.LOG_VIEW,
+}
+ROLE_PERMISSIONS[RoleType.VIEWER] = set(_PUBLISH_VIEW) | {Permission.USER_ROLE_REQUEST}
+ROLE_PERMISSIONS[RoleType.DEVELOPER] |= _PUBLISH_VIEW | {
+    Permission.AUTOUNIT_MANAGE_DRAFT, Permission.AUTOUNIT_SUBMIT_TEST,
+    Permission.AUTOUNIT_SUBMIT_PUBLISH, Permission.AUTOUNIT_SUBMIT_REMOVE,
+    Permission.DRIVER_MANAGE_DRAFT, Permission.DRIVER_SUBMIT_TEST,
+    Permission.DRIVER_SUBMIT_PUBLISH, Permission.DRIVER_SUBMIT_REMOVE,
+    Permission.USER_ROLE_REQUEST,
+}
+ROLE_PERMISSIONS[RoleType.TESTER] = _PUBLISH_VIEW | {
+    Permission.APPROVAL_TEST_VIEW, Permission.APPROVAL_TEST_REVIEW,
+    Permission.USER_ROLE_REQUEST,
+}
+ROLE_PERMISSIONS[RoleType.RELEASE_MANAGER] = _PUBLISH_VIEW | {
+    Permission.APPROVAL_RELEASE_VIEW, Permission.APPROVAL_RELEASE_REVIEW,
+    Permission.USER_ROLE_REQUEST,
+}
+ROLE_PERMISSIONS[RoleType.ENGINEER] = _PUBLISH_VIEW | {
+    Permission.FACILITY_FACTORY_CREATE, Permission.FACILITY_FACTORY_EDIT, Permission.FACILITY_FACTORY_DELETE,
+    Permission.FACILITY_LINE_CREATE, Permission.FACILITY_LINE_EDIT, Permission.FACILITY_LINE_DELETE,
+    Permission.FACILITY_STATION_CREATE, Permission.FACILITY_STATION_EDIT, Permission.FACILITY_STATION_DELETE,
+    Permission.FACILITY_EQUIPMENT_MANAGE, Permission.BINDING_AUTOUNIT_MANAGE,
+    Permission.USER_ROLE_REQUEST,
+}
+ROLE_DESCRIPTIONS.update({
+    RoleType.RELEASE_MANAGER: "发布管理员 - 审批发布、重新上架和下架",
+    RoleType.ENGINEER: "现场工程师 - 管理现场结构和设备绑定",
+    RoleType.VIEWER: "查看人员 - 只读查看发布系统数据",
+})
+
 
 def get_role_permissions(role: str) -> Set[str]:
     """
@@ -566,4 +624,3 @@ def get_all_roles() -> List[Dict]:
         角色列表
     """
     return [get_role_info(role.value) for role in RoleType]
-

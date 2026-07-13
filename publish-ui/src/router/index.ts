@@ -9,6 +9,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false }
   },
   {
+    path: '/register',
+    name: 'Register',
+    component: () => import('../views/Register.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
     path: '/',
     component: () => import('../layouts/MainLayout.vue'),
     meta: { requiresAuth: true },
@@ -52,6 +58,18 @@ const routes: RouteRecordRaw[] = [
         name: 'Logs',
         component: () => import('../views/Logs.vue'),
         meta: { title: 'logs' }
+      },
+      {
+        path: '/users',
+        name: 'Users',
+        component: () => import('../views/Users.vue'),
+        meta: { title: 'users', permission: 'user:manage' }
+      },
+      {
+        path: '/profile',
+        name: 'Profile',
+        component: () => import('../views/Profile.vue'),
+        meta: { title: 'profile' }
       }
     ]
   }
@@ -68,8 +86,12 @@ router.beforeEach((to, _from, next) => {
   
   if (to.meta.requiresAuth !== false && !token) {
     next('/login')
-  } else if (to.path === '/login' && token) {
+  } else if ((to.path === '/login' || to.path === '/register') && token) {
     next('/')
+  } else if (to.meta.permission) {
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    if (!(user.permissions || []).includes(to.meta.permission)) next('/')
+    else next()
   } else {
     next()
   }

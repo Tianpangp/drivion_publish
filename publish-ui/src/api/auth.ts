@@ -6,10 +6,19 @@ export interface UserInfo {
   id: string
   username: string
   nickname?: string
-  role: 'admin' | 'user'
+  role: RoleCode
   email?: string
   avatar?: string
   permissions: string[]
+}
+
+export type RoleCode = 'admin' | 'developer' | 'tester' | 'release_manager' | 'engineer' | 'viewer'
+
+export interface RoleInfo { code: RoleCode; name: string; description?: string }
+export interface UserListItem extends Omit<UserInfo, 'permissions'> { status: 'active' | 'inactive'; createTime: string; updateTime: string }
+export interface RoleRequestItem {
+  id: string; userId: string; username: string; nickname?: string; currentRole: RoleCode
+  requestedRole: RoleCode; reason?: string; status: string; createdAt: string; reviewComment?: string
 }
 
 // 登录请求
@@ -78,10 +87,49 @@ export function getUserInfo() {
 
 // 用户列表搜索
 export function searchUsers(params: UserSearchParams) {
-  return request({
+  return request<ApiResponse<{ list: UserListItem[]; total: number; page: number; pageSize: number }>>({
     url: '/auth/users/search',
     method: 'get',
     params
   })
 }
 
+export function getRoles() {
+  return request<ApiResponse<RoleInfo[]>>({ url: '/auth/roles', method: 'get' })
+}
+
+export function updateProfile(data: { nickname?: string; email?: string }) {
+  return request<ApiResponse<UserInfo>>({ url: '/auth/profile', method: 'put', data })
+}
+
+export function changePassword(data: { oldPassword: string; newPassword: string }) {
+  return request<ApiResponse<null>>({ url: '/auth/password', method: 'put', data })
+}
+
+export function deleteAccount(password: string) {
+  return request<ApiResponse<null>>({ url: '/auth/account', method: 'delete', data: { password } })
+}
+
+export function applyRole(role: RoleCode, reason?: string) {
+  return request<ApiResponse<{ id: string; status: string }>>({ url: '/auth/role-requests', method: 'post', data: { role, reason } })
+}
+
+export function getMyRoleRequests() {
+  return request<ApiResponse<RoleRequestItem[]>>({ url: '/auth/role-requests/me', method: 'get' })
+}
+
+export function getRoleRequests(status = 'pending') {
+  return request<ApiResponse<RoleRequestItem[]>>({ url: '/auth/role-requests', method: 'get', params: { status } })
+}
+
+export function reviewRoleRequest(id: string, decision: 'approve' | 'reject', comment?: string) {
+  return request<ApiResponse<null>>({ url: `/auth/role-requests/${id}/${decision}`, method: 'post', data: { comment } })
+}
+
+export function changeUserRole(id: string, role: RoleCode) {
+  return request<ApiResponse<null>>({ url: `/auth/users/${id}/role`, method: 'put', data: { role } })
+}
+
+export function changeUserStatus(id: string, status: 'active' | 'inactive') {
+  return request<ApiResponse<null>>({ url: `/auth/users/${id}/status`, method: 'put', data: { status } })
+}

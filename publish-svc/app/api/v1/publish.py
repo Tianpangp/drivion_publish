@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.permissions import Permission, has_permission
 from app.core.storage import storage
 from app.core.utils import format_datetime, generate_id
 from app.models.facility import Equipment, Factory, Line, Station
@@ -29,6 +30,16 @@ from app.schemas.common import Response
 
 router = APIRouter()
 MAX_UPLOAD_SIZE = 100 * 1024 * 1024
+
+
+def _require(user: User, permission: Permission) -> None:
+    if not has_permission(getattr(user, "role_code", ""), permission.value):
+        raise HTTPException(403, f"无操作权限: {permission.value}")
+
+
+def _require_any(user: User, *permissions: Permission) -> None:
+    if not any(has_permission(getattr(user, "role_code", ""), item.value) for item in permissions):
+        raise HTTPException(403, "无操作权限")
 
 
 def _now() -> datetime:
@@ -169,7 +180,8 @@ def _node(item: Any, type_: str, children: list[dict[str, Any]] | None = None) -
 
 
 @router.get("/tree", response_model=Response[list[dict[str, Any]]])
-async def tree(search: str | None = None, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+async def tree(search: str | None = None, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    _require(user, Permission.FACILITY_FACTORY_VIEW)
     factories = (await db.execute(select(Factory).where(Factory.is_deleted == 0).order_by(Factory.create_time))).scalars().all()
     lines = (await db.execute(select(Line).where(Line.is_deleted == 0).order_by(Line.create_time))).scalars().all()
     stations = (await db.execute(select(Station).where(Station.is_deleted == 0).order_by(Station.create_time))).scalars().all()
@@ -197,6 +209,9 @@ async def tree(search: str | None = None, db: AsyncSession = Depends(get_db), _:
 
 @router.post("/{kind}", response_model=Response[dict[str, Any]])
 async def create_node(kind: Literal["factory", "line", "station", "equipment"], payload: dict[str, Any] = Body(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    create_permissions = {"factory": Permission.FACILITY_FACTORY_CREATE, "line": Permission.FACILITY_LINE_CREATE,
+        "station": Permission.FACILITY_STATION_CREATE, "equipment": Permission.FACILITY_EQUIPMENT_MANAGE}
+    _require(user, create_permissions[kind])
     models = {"factory": Factory, "line": Line, "station": Station, "equipment": Equipment}
     parent_fields = {"line": "factory_id", "station": "line_id", "equipment": "station_id"}
     parent_payload = {"line": "factoryId", "station": "lineId", "equipment": "stationId"}
@@ -231,6 +246,9 @@ async def _find_node(db: AsyncSession, node_id: str):
 @router.put("/nodes/{node_id}", response_model=Response[dict[str, Any]])
 async def update_node(node_id: str, payload: dict[str, Any] = Body(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     kind, item = await _find_node(db, node_id)
+    edit_permissions = {"factory": Permission.FACILITY_FACTORY_EDIT, "line": Permission.FACILITY_LINE_EDIT,
+        "station": Permission.FACILITY_STATION_EDIT, "equipment": Permission.FACILITY_EQUIPMENT_MANAGE}
+    _require(user, edit_permissions[kind])
     field_map = {"equipmentType": "equipment_type"}
     for field in ("name", "code", "description", "status", "location", "ip", "mac", "vendor", "model", "equipmentType"):
         target = field_map.get(field, field)
@@ -243,13 +261,17 @@ async def update_node(node_id: str, payload: dict[str, Any] = Body(...), db: Asy
 @router.delete("/nodes/{node_id}", response_model=Response[None])
 async def delete_node(node_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     kind, item = await _find_node(db, node_id)
+    delete_permissions = {"factory": Permission.FACILITY_FACTORY_DELETE, "line": Permission.FACILITY_LINE_DELETE,
+        "station": Permission.FACILITY_STATION_DELETE, "equipment": Permission.FACILITY_EQUIPMENT_MANAGE}
+    _require(user, delete_permissions[kind])
     item.is_deleted = 1
     _log(db, user, "delete", "现场结构", f"删除节点 {item.name}", item.id, kind)
     return Response(data=None)
 
 
 @router.get("/autounit/packages", response_model=Response[dict[str, Any]])
-async def autounit_list(page: int = Query(1, ge=1), pageSize: int = Query(20, ge=1, le=100), search: str | None = None, status: str | None = None, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+async def autounit_list(page: int = Query(1, ge=1), pageSize: int = Query(20, ge=1, le=100), search: str | None = None, status: str | None = None, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    _require(user, Permission.AUTOUNIT_VIEW)
     query = select(AutoUnitPackage)
     if search: query = query.where(or_(AutoUnitPackage.name.like(f"%{search}%"), AutoUnitPackage.package_id.like(f"%{search}%"), AutoUnitPackage.file_name.like(f"%{search}%")))
     if status: query = query.where(AutoUnitPackage.status == status)
@@ -286,12 +308,14 @@ async def _save_autounit(file: UploadFile, db: AsyncSession, user: User, existin
 
 @router.post("/autounit/packages/upload", response_model=Response[dict[str, Any]])
 async def upload_autounit(file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    _require(user, Permission.AUTOUNIT_MANAGE_DRAFT)
     item = await _save_autounit(file, db, user)
     return Response(data=await _autounit_json(db, item), message="上传成功")
 
 
 @router.put("/autounit/packages/{package_id}/upload", response_model=Response[dict[str, Any]])
 async def replace_autounit(package_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    _require(user, Permission.AUTOUNIT_MANAGE_DRAFT)
     item = await db.get(AutoUnitPackage, package_id)
     if not item: raise HTTPException(404, "AutoUnit 版本不存在")
     item = await _save_autounit(file, db, user, item)
@@ -299,7 +323,8 @@ async def replace_autounit(package_id: str, file: UploadFile = File(...), db: As
 
 
 @router.get("/drivers/packages", response_model=Response[dict[str, Any]])
-async def driver_list(page: int = Query(1, ge=1), pageSize: int = Query(20, ge=1, le=100), search: str | None = None, status: str | None = None, type: str | None = None, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+async def driver_list(page: int = Query(1, ge=1), pageSize: int = Query(20, ge=1, le=100), search: str | None = None, status: str | None = None, type: str | None = None, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    _require(user, Permission.DRIVER_VIEW)
     query = select(DriverPackage)
     if search: query = query.where(or_(DriverPackage.name.like(f"%{search}%"), DriverPackage.file_name.like(f"%{search}%")))
     if status: query = query.where(DriverPackage.status == status)
@@ -336,12 +361,14 @@ async def _save_driver(file: UploadFile, db: AsyncSession, user: User, existing:
 
 @router.post("/drivers/packages/upload", response_model=Response[dict[str, Any]])
 async def upload_driver(file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    _require(user, Permission.DRIVER_MANAGE_DRAFT)
     item = await _save_driver(file, db, user)
     return Response(data=_driver_json(item), message="上传成功")
 
 
 @router.put("/drivers/packages/{package_id}/upload", response_model=Response[dict[str, Any]])
 async def replace_driver(package_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    _require(user, Permission.DRIVER_MANAGE_DRAFT)
     item = await db.get(DriverPackage, package_id)
     if not item: raise HTTPException(404, "HAL 版本不存在")
     item = await _save_driver(file, db, user, item)
@@ -376,6 +403,7 @@ async def _submit(db: AsyncSession, user: User, kind: str, item: Any, action: st
 @router.post("/{kind}/packages/{package_id}/submit-testing", response_model=Response[dict[str, Any]])
 async def submit_testing(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     domain = "autounit" if kind == "autounit" else "driver"
+    _require(user, Permission.AUTOUNIT_SUBMIT_TEST if domain == "autounit" else Permission.DRIVER_SUBMIT_TEST)
     item = await _package(db, domain, package_id)
     if item.status != "pending_testing": raise HTTPException(400, "只有待测试版本可以提交测试")
     await _submit(db, user, domain, item, "提交测试", "testing", "pending_testing")
@@ -385,6 +413,7 @@ async def submit_testing(kind: Literal["autounit", "drivers"], package_id: str, 
 @router.post("/{kind}/packages/{package_id}/submit-publish", response_model=Response[dict[str, Any]])
 async def submit_publish(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     domain = "autounit" if kind == "autounit" else "driver"
+    _require(user, Permission.AUTOUNIT_SUBMIT_PUBLISH if domain == "autounit" else Permission.DRIVER_SUBMIT_PUBLISH)
     item = await _package(db, domain, package_id)
     if item.status not in {"testing", "removed"}: raise HTTPException(400, "只有已测试或已下架版本可以提交发布")
     previous = item.status
@@ -396,6 +425,7 @@ async def submit_publish(kind: Literal["autounit", "drivers"], package_id: str, 
 @router.post("/{kind}/packages/{package_id}/submit-remove", response_model=Response[dict[str, Any]])
 async def submit_remove(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     domain = "autounit" if kind == "autounit" else "driver"
+    _require(user, Permission.AUTOUNIT_SUBMIT_REMOVE if domain == "autounit" else Permission.DRIVER_SUBMIT_REMOVE)
     item = await _package(db, domain, package_id)
     if item.status != "published": raise HTTPException(400, "只有已发布版本可以申请下架")
     if domain == "autounit" and await db.scalar(select(func.count()).select_from(EquipmentAutoUnitBinding).where(EquipmentAutoUnitBinding.package_id == item.id)):
@@ -408,6 +438,7 @@ async def submit_remove(kind: Literal["autounit", "drivers"], package_id: str, d
 @router.post("/{kind}/packages/{package_id}/reject", response_model=Response[None])
 async def active_reject(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     domain = "autounit" if kind == "autounit" else "driver"
+    _require(user, Permission.AUTOUNIT_MANAGE_DRAFT if domain == "autounit" else Permission.DRIVER_MANAGE_DRAFT)
     item = await _package(db, domain, package_id)
     if item.status in {"published", "removed", "pending_remove"}: raise HTTPException(400, "已发布版本只能申请下架")
     item.status, item.locked = "pending_testing", False
@@ -419,6 +450,7 @@ async def active_reject(kind: Literal["autounit", "drivers"], package_id: str, d
 @router.delete("/{kind}/packages/{package_id}", response_model=Response[None])
 async def delete_package(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     domain = "autounit" if kind == "autounit" else "driver"
+    _require(user, Permission.AUTOUNIT_MANAGE_DRAFT if domain == "autounit" else Permission.DRIVER_MANAGE_DRAFT)
     item = await _package(db, domain, package_id)
     if item.status != "pending_testing": raise HTTPException(400, "只有待测试版本可以直接删除")
     if domain == "autounit" and await db.scalar(select(func.count()).select_from(EquipmentAutoUnitBinding).where(EquipmentAutoUnitBinding.package_id == item.id)):
@@ -432,8 +464,9 @@ async def delete_package(kind: Literal["autounit", "drivers"], package_id: str, 
 
 
 @router.get("/{kind}/packages/{package_id}/download")
-async def download_package(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+async def download_package(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     domain = "autounit" if kind == "autounit" else "driver"
+    _require(user, Permission.AUTOUNIT_DOWNLOAD if domain == "autounit" else Permission.DRIVER_DOWNLOAD)
     item = await _package(db, domain, package_id)
     if item.deleted: raise HTTPException(410, "该版本已下架")
     try: content = storage.get(item.file_path)
@@ -443,14 +476,16 @@ async def download_package(kind: Literal["autounit", "drivers"], package_id: str
 
 
 @router.get("/{kind}/packages/{package_id}", response_model=Response[dict[str, Any]])
-async def package_detail(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+async def package_detail(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     domain = "autounit" if kind == "autounit" else "driver"
+    _require(user, Permission.AUTOUNIT_VIEW if domain == "autounit" else Permission.DRIVER_VIEW)
     item = await _package(db, domain, package_id)
     return Response(data=await _autounit_json(db, item) if domain == "autounit" else _driver_json(item))
 
 
 @router.get("/equipment", response_model=Response[list[dict[str, Any]]])
-async def equipment_list(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+async def equipment_list(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    _require(user, Permission.FACILITY_EQUIPMENT_VIEW)
     rows = (await db.execute(
         select(Equipment, Station, Line, Factory)
         .select_from(Equipment)
@@ -473,6 +508,7 @@ async def equipment_list(db: AsyncSession = Depends(get_db), _: User = Depends(g
 
 @router.post("/equipment/{equipment_id}/autounit-binding", response_model=Response[dict[str, Any]])
 async def bind_equipment(equipment_id: str, payload: dict[str, str] = Body(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    _require(user, Permission.BINDING_AUTOUNIT_MANAGE)
     equipment = await db.get(Equipment, equipment_id)
     package = await db.get(AutoUnitPackage, payload.get("packageVersionId"))
     if not equipment or equipment.is_deleted: raise HTTPException(404, "设备不存在")
@@ -489,6 +525,7 @@ async def bind_equipment(equipment_id: str, payload: dict[str, str] = Body(...),
 
 @router.delete("/equipment/{equipment_id}/autounit-binding", response_model=Response[None])
 async def unbind_equipment(equipment_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    _require(user, Permission.BINDING_AUTOUNIT_MANAGE)
     binding = await db.scalar(select(EquipmentAutoUnitBinding).where(EquipmentAutoUnitBinding.equipment_id == equipment_id))
     if not binding: raise HTTPException(404, "设备未绑定 AutoUnit")
     package = await db.get(AutoUnitPackage, binding.package_id)
@@ -504,8 +541,16 @@ def _approval_json(item: PublishApproval, package: Any) -> dict[str, Any]:
 
 
 @router.get("/approvals", response_model=Response[list[dict[str, Any]]])
-async def approvals(type: str | None = None, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+async def approvals(type: str | None = None, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    _require_any(user, Permission.APPROVAL_TEST_VIEW, Permission.APPROVAL_RELEASE_VIEW)
     query = select(PublishApproval).where(PublishApproval.status == "pending").order_by(PublishApproval.submitted_at.desc())
+    role_code = getattr(user, "role_code", "")
+    can_test = has_permission(role_code, Permission.APPROVAL_TEST_VIEW.value)
+    can_release = has_permission(role_code, Permission.APPROVAL_RELEASE_VIEW.value)
+    if can_test and not can_release:
+        query = query.where(PublishApproval.action == "提交测试")
+    elif can_release and not can_test:
+        query = query.where(PublishApproval.action != "提交测试")
     if type and type != "全部": query = query.where(PublishApproval.artifact_type == type)
     items = (await db.execute(query)).scalars().all()
     result = []
@@ -519,6 +564,7 @@ async def approvals(type: str | None = None, db: AsyncSession = Depends(get_db),
 async def review_approval(approval_id: str, decision: Literal["approve", "reject"], db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     approval = await db.get(PublishApproval, approval_id)
     if not approval or approval.status != "pending": raise HTTPException(404, "待审批记录不存在")
+    _require(user, Permission.APPROVAL_TEST_REVIEW if approval.action == "提交测试" else Permission.APPROVAL_RELEASE_REVIEW)
     item = await _package(db, approval.target_kind, approval.target_id)
     item.status = approval.approve_status if decision == "approve" else approval.reject_status
     if decision == "approve" and approval.action == "提交测试": item.locked = True

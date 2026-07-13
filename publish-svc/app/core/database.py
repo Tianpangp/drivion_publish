@@ -48,6 +48,37 @@ async def init_db():
     """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    await seed_roles()
+
+
+async def seed_roles():
+    """初始化发布系统固定角色，不覆盖已有角色。"""
+    from sqlalchemy import select
+    from app.models.user import Role
+
+    definitions = [
+        (1, "admin", "系统管理员", "Administrator", "管理用户和全部发布业务"),
+        (2, "developer", "开发人员", "Developer", "维护制品草稿并提交审批"),
+        (3, "tester", "测试人员", "Tester", "处理测试审批"),
+        (4, "release_manager", "发布管理员", "Release manager", "处理发布和下架审批"),
+        (5, "engineer", "现场工程师", "Engineer", "维护现场结构和设备绑定"),
+        (6, "viewer", "查看人员", "Viewer", "只读查看发布数据"),
+    ]
+    async with AsyncSessionLocal() as session:
+        existing_rows = (await session.execute(select(Role.id, Role.code))).all()
+        existing_codes = {code for _, code in existing_rows}
+        used_ids = {role_id for role_id, _ in existing_rows}
+        next_id = max(used_ids, default=0) + 1
+        for role_id, code, name, name_en, description in definitions:
+            if code in existing_codes:
+                continue
+            assigned_id = role_id
+            if assigned_id in used_ids:
+                assigned_id = next_id
+                next_id += 1
+            used_ids.add(assigned_id)
+            session.add(Role(id=assigned_id, code=code, name=name, name_en=name_en, description=description, enabled=True))
+        await session.commit()
 
 
 async def close_db():
@@ -55,4 +86,3 @@ async def close_db():
     关闭数据库连接
     """
     await engine.dispose()
-

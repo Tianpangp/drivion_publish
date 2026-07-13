@@ -27,6 +27,7 @@ export default {
     autounit: 'AutoUnit 包',
     approvals: '审批中心',
     logs: '操作日志',
+    users: '用户管理',
     logout: '退出登录',
     profile: '个人中心',
     settings: '设置'
@@ -151,6 +152,11 @@ export default {
   user: {
     admin: '管理员',
     user: '普通用户',
+    developer: '开发人员',
+    tester: '测试人员',
+    release_manager: '发布管理员',
+    engineer: '现场工程师',
+    viewer: '查看人员',
     role: '角色'
   }
 }

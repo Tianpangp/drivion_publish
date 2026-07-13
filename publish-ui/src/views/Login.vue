@@ -76,15 +76,7 @@
           </a-button>
         </a-form>
 
-        <!-- 提示信息 -->
-        <div class="mt-6 p-4 bg-blue-50 rounded-lg">
-          <p class="text-sm text-gray-600 text-center">
-            <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-            </svg>
-            演示账号: admin/admin 或 user/user
-          </p>
-        </div>
+        <div class="mt-6 text-center text-sm text-gray-600">还没有账号？<router-link to="/register" class="text-blue-600 ml-1">立即注册</router-link></div>
       </div>
 
       <!-- 语言切换 -->

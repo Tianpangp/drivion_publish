@@ -2,7 +2,7 @@
 用户相关模型
 """
 from datetime import datetime
-from sqlalchemy import Column, String, Enum, DateTime, BigInteger, Boolean, ForeignKey
+from sqlalchemy import Column, String, Enum, DateTime, BigInteger, Boolean, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -41,3 +41,18 @@ class Role(Base):
     # 关系
     users = relationship("User", back_populates="role_relation")
 
+
+class RoleRequest(Base):
+    """用户角色申请。"""
+    __tablename__ = "role_requests"
+
+    id = Column(String(64), primary_key=True)
+    user_id = Column(String(64), ForeignKey("users.id"), nullable=False, index=True)
+    current_role = Column(String(50), nullable=False)
+    requested_role = Column(String(50), nullable=False)
+    reason = Column(Text)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    reviewer_id = Column(String(64))
+    review_comment = Column(Text)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    reviewed_at = Column(DateTime)

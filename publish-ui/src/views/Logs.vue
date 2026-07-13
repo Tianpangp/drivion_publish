@@ -5,7 +5,7 @@
         <h1 class="text-2xl font-bold text-gray-800">{{ t('logs.title') }}</h1>
         <p class="text-gray-500 mt-1">查看系统操作日志记录</p>
       </div>
-      <a-button @click="handleExport">
+      <a-button v-if="canExport" @click="handleExport">
         <template #icon>
           <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -139,8 +139,11 @@ import type { TableProps } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import * as logsApi from '../api/logs'
 import type { LogInfo, OperationType, OperationResult, OperationModule } from '../api/logs'
+import { useUserStore } from '../stores/user'
 
 const { t } = useI18n()
+const userStore = useUserStore()
+const canExport = userStore.hasPermission('log:export')
 
 const loading = ref(false)
 const logsData = ref<LogInfo[]>([])
