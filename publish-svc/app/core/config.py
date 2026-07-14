@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     
     # 服务器配置
     HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    PORT: int = 8001
     
     # 数据库配置
     # DB_TYPE: mysql / sqlite / postgresql
