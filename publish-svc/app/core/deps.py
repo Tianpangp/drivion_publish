@@ -226,3 +226,23 @@ def user_has_permission(user: User, permission: str) -> bool:
     if hasattr(user, "permission_codes"):
         return permission in user.permission_codes
     return has_permission(getattr(user, "role_code", ""), permission)
+
+
+async def require_fresh_sso_permission(user: User, permission: str) -> None:
+    """高风险操作在线确认账号和权限；发布系统明确忽略 Scope。"""
+    if getattr(user, "auth_source", "local") != "sso":
+        return
+    if permission not in set(getattr(user, "external_permissions", [])):
+        raise HTTPException(status_code=403, detail=f"无操作权限: {permission}")
+    if not settings.SSO_INTROSPECT_HIGH_RISK:
+        return
+    try:
+        result = await sso_client.introspect(user.sso_access_token)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="SSO 权限在线校验失败") from exc
+    if not result.get("active") or result.get("sub") != user.id:
+        raise HTTPException(status_code=401, detail="SSO Token 已失效")
+    if result.get("client_id") != settings.SSO_CLIENT_ID:
+        raise HTTPException(status_code=401, detail="SSO Token 客户端不匹配")
+    if permission not in set(result.get("permissions", [])):
+        raise HTTPException(status_code=403, detail=f"SSO 权限已被撤销: {permission}")

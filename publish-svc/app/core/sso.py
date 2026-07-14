@@ -5,7 +5,7 @@ import base64
 import hashlib
 import secrets
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode
 
@@ -22,6 +22,14 @@ from app.models.sso import SsoAuthTransaction, SsoSession
 
 class SsoError(RuntimeError):
     pass
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _from_timestamp(timestamp: int) -> datetime:
+    return datetime.fromtimestamp(timestamp, timezone.utc).replace(tzinfo=None)
 
 
 class SsoClient:
@@ -111,7 +119,7 @@ class SsoClient:
         nonce = secrets.token_urlsafe(48)
         verifier = secrets.token_urlsafe(64)
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
-        now = datetime.utcnow()
+        now = _utcnow()
         await db.execute(delete(SsoAuthTransaction).where(SsoAuthTransaction.expires_at < now))
         db.add(SsoAuthTransaction(
             id=self._digest(raw_handle), state=state, nonce=nonce,
@@ -147,7 +155,7 @@ class SsoClient:
         self, db: AsyncSession, raw_transaction: str, state: str, code: str
     ) -> str:
         transaction = await db.get(SsoAuthTransaction, self._digest(raw_transaction))
-        if not transaction or transaction.expires_at < datetime.utcnow() or not secrets.compare_digest(transaction.state, state):
+        if not transaction or transaction.expires_at < _utcnow() or not secrets.compare_digest(transaction.state, state):
             raise SsoError("SSO 登录状态无效或已过期")
         verifier = self.decrypt(transaction.code_verifier)
         nonce = transaction.nonce
@@ -164,7 +172,7 @@ class SsoClient:
         access_claims = await self.verify_token(tokens["access_token"], "access")
         userinfo = await self.userinfo(tokens["access_token"])
         raw_session = secrets.token_urlsafe(48)
-        now = datetime.utcnow()
+        now = _utcnow()
         db.add(SsoSession(
             id=self._digest(raw_session), subject=userinfo["sub"],
             username=userinfo.get("preferred_username") or access_claims.get("username") or userinfo["sub"],
@@ -173,7 +181,7 @@ class SsoClient:
             permission_grants=userinfo.get("permission_grants", []),
             access_token=self.encrypt(tokens["access_token"]),
             refresh_token=self.encrypt(tokens["refresh_token"]),
-            access_expires_at=datetime.utcfromtimestamp(access_claims["exp"]),
+            access_expires_at=_from_timestamp(access_claims["exp"]),
             created_at=now, updated_at=now,
         ))
         return raw_session
@@ -193,11 +201,11 @@ class SsoClient:
         session = (await db.execute(query)).scalar_one_or_none()
         if not session:
             raise HTTPException(401, "SSO 会话不存在或已过期")
-        if session.created_at + timedelta(seconds=settings.SSO_SESSION_MAX_AGE_SECONDS) <= datetime.utcnow():
+        if session.created_at + timedelta(seconds=settings.SSO_SESSION_MAX_AGE_SECONDS) <= _utcnow():
             await db.delete(session)
             await db.commit()
             raise HTTPException(401, "SSO 会话已过期")
-        refresh_at = datetime.utcnow() + timedelta(seconds=settings.SSO_REFRESH_BEFORE_EXPIRY_SECONDS)
+        refresh_at = _utcnow() + timedelta(seconds=settings.SSO_REFRESH_BEFORE_EXPIRY_SECONDS)
         if session.access_expires_at <= refresh_at:
             try:
                 tokens = await self._token_request({
@@ -212,12 +220,12 @@ class SsoClient:
                 raise HTTPException(401, "SSO 会话刷新失败，请重新登录") from exc
             session.access_token = self.encrypt(tokens["access_token"])
             session.refresh_token = self.encrypt(tokens["refresh_token"])
-            session.access_expires_at = datetime.utcfromtimestamp(claims["exp"])
+            session.access_expires_at = _from_timestamp(claims["exp"])
             session.roles = userinfo.get("roles", [])
             session.permissions = userinfo.get("permissions", [])
             session.permission_grants = userinfo.get("permission_grants", [])
             session.nickname, session.email = userinfo.get("name"), userinfo.get("email")
-            session.updated_at = datetime.utcnow()
+            session.updated_at = _utcnow()
             await db.flush()
         return session
 

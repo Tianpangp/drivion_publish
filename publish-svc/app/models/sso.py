@@ -1,9 +1,13 @@
 """SSO BFF 服务端会话模型。"""
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, JSON, String, Text
 
 from app.core.database import Base
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class SsoAuthTransaction(Base):
@@ -13,7 +17,7 @@ class SsoAuthTransaction(Base):
     state = Column(String(128), nullable=False, unique=True, index=True)
     nonce = Column(String(128), nullable=False)
     code_verifier = Column(Text, nullable=False)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=_utcnow)
     expires_at = Column(DateTime, nullable=False, index=True)
 
 
@@ -31,5 +35,5 @@ class SsoSession(Base):
     access_token = Column(Text, nullable=False)
     refresh_token = Column(Text, nullable=False)
     access_expires_at = Column(DateTime, nullable=False, index=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=_utcnow)
+    updated_at = Column(DateTime, nullable=False, default=_utcnow)

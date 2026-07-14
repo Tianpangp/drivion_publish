@@ -17,7 +17,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user, user_has_permission
+from app.core.deps import get_current_user, require_fresh_sso_permission, user_has_permission
 from app.core.permissions import Permission
 from app.core.storage import storage
 from app.core.utils import format_datetime, generate_id
@@ -212,6 +212,9 @@ async def create_node(kind: Literal["factory", "line", "station", "equipment"], 
     create_permissions = {"factory": Permission.FACILITY_FACTORY_CREATE, "line": Permission.FACILITY_LINE_CREATE,
         "station": Permission.FACILITY_STATION_CREATE, "equipment": Permission.FACILITY_EQUIPMENT_MANAGE}
     _require(user, create_permissions[kind])
+    external_permissions = {"factory": "platform.site.create", "line": "platform.line.create",
+        "station": "platform.station.create", "equipment": "platform.equipment.create"}
+    await require_fresh_sso_permission(user, external_permissions[kind])
     models = {"factory": Factory, "line": Line, "station": Station, "equipment": Equipment}
     parent_fields = {"line": "factory_id", "station": "line_id", "equipment": "station_id"}
     parent_payload = {"line": "factoryId", "station": "lineId", "equipment": "stationId"}
@@ -249,6 +252,9 @@ async def update_node(node_id: str, payload: dict[str, Any] = Body(...), db: Asy
     edit_permissions = {"factory": Permission.FACILITY_FACTORY_EDIT, "line": Permission.FACILITY_LINE_EDIT,
         "station": Permission.FACILITY_STATION_EDIT, "equipment": Permission.FACILITY_EQUIPMENT_MANAGE}
     _require(user, edit_permissions[kind])
+    external_permissions = {"factory": "platform.site.update", "line": "platform.line.update",
+        "station": "platform.station.update", "equipment": "platform.equipment.update"}
+    await require_fresh_sso_permission(user, external_permissions[kind])
     field_map = {"equipmentType": "equipment_type"}
     for field in ("name", "code", "description", "status", "location", "ip", "mac", "vendor", "model", "equipmentType"):
         target = field_map.get(field, field)
@@ -264,6 +270,9 @@ async def delete_node(node_id: str, db: AsyncSession = Depends(get_db), user: Us
     delete_permissions = {"factory": Permission.FACILITY_FACTORY_DELETE, "line": Permission.FACILITY_LINE_DELETE,
         "station": Permission.FACILITY_STATION_DELETE, "equipment": Permission.FACILITY_EQUIPMENT_MANAGE}
     _require(user, delete_permissions[kind])
+    external_permissions = {"factory": "platform.site.delete", "line": "platform.line.delete",
+        "station": "platform.station.delete", "equipment": "platform.equipment.delete"}
+    await require_fresh_sso_permission(user, external_permissions[kind])
     item.is_deleted = 1
     _log(db, user, "delete", "现场结构", f"删除节点 {item.name}", item.id, kind)
     return Response(data=None)
@@ -309,6 +318,7 @@ async def _save_autounit(file: UploadFile, db: AsyncSession, user: User, existin
 @router.post("/autounit/packages/upload", response_model=Response[dict[str, Any]])
 async def upload_autounit(file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     _require_any(user, Permission.AUTOUNIT_MANAGE_DRAFT, Permission.AUTOUNIT_UPLOAD)
+    await require_fresh_sso_permission(user, "autounit.definition.publish")
     item = await _save_autounit(file, db, user)
     return Response(data=await _autounit_json(db, item), message="上传成功")
 
@@ -316,6 +326,7 @@ async def upload_autounit(file: UploadFile = File(...), db: AsyncSession = Depen
 @router.put("/autounit/packages/{package_id}/upload", response_model=Response[dict[str, Any]])
 async def replace_autounit(package_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     _require_any(user, Permission.AUTOUNIT_MANAGE_DRAFT, Permission.AUTOUNIT_UPDATE)
+    await require_fresh_sso_permission(user, "autounit.definition.publish")
     item = await db.get(AutoUnitPackage, package_id)
     if not item: raise HTTPException(404, "AutoUnit 版本不存在")
     item = await _save_autounit(file, db, user, item)
@@ -362,6 +373,7 @@ async def _save_driver(file: UploadFile, db: AsyncSession, user: User, existing:
 @router.post("/drivers/packages/upload", response_model=Response[dict[str, Any]])
 async def upload_driver(file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     _require_any(user, Permission.DRIVER_MANAGE_DRAFT, Permission.DRIVER_UPLOAD)
+    await require_fresh_sso_permission(user, "hal.driver.publish")
     item = await _save_driver(file, db, user)
     return Response(data=_driver_json(item), message="上传成功")
 
@@ -369,6 +381,7 @@ async def upload_driver(file: UploadFile = File(...), db: AsyncSession = Depends
 @router.put("/drivers/packages/{package_id}/upload", response_model=Response[dict[str, Any]])
 async def replace_driver(package_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     _require_any(user, Permission.DRIVER_MANAGE_DRAFT, Permission.DRIVER_UPDATE)
+    await require_fresh_sso_permission(user, "hal.driver.publish")
     item = await db.get(DriverPackage, package_id)
     if not item: raise HTTPException(404, "HAL 版本不存在")
     item = await _save_driver(file, db, user, item)
@@ -404,6 +417,7 @@ async def _submit(db: AsyncSession, user: User, kind: str, item: Any, action: st
 async def submit_testing(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     domain = "autounit" if kind == "autounit" else "driver"
     _require(user, Permission.AUTOUNIT_SUBMIT_TEST if domain == "autounit" else Permission.DRIVER_SUBMIT_TEST)
+    await require_fresh_sso_permission(user, "autounit.definition.publish" if domain == "autounit" else "hal.driver.publish")
     item = await _package(db, domain, package_id)
     if item.status != "pending_testing": raise HTTPException(400, "只有待测试版本可以提交测试")
     await _submit(db, user, domain, item, "提交测试", "testing", "pending_testing")
@@ -414,6 +428,7 @@ async def submit_testing(kind: Literal["autounit", "drivers"], package_id: str, 
 async def submit_publish(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     domain = "autounit" if kind == "autounit" else "driver"
     _require(user, Permission.AUTOUNIT_SUBMIT_PUBLISH if domain == "autounit" else Permission.DRIVER_SUBMIT_PUBLISH)
+    await require_fresh_sso_permission(user, "autounit.definition.publish" if domain == "autounit" else "hal.driver.publish")
     item = await _package(db, domain, package_id)
     if item.status not in {"testing", "removed"}: raise HTTPException(400, "只有已测试或已下架版本可以提交发布")
     previous = item.status
@@ -426,6 +441,7 @@ async def submit_publish(kind: Literal["autounit", "drivers"], package_id: str, 
 async def submit_remove(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     domain = "autounit" if kind == "autounit" else "driver"
     _require(user, Permission.AUTOUNIT_SUBMIT_REMOVE if domain == "autounit" else Permission.DRIVER_SUBMIT_REMOVE)
+    await require_fresh_sso_permission(user, "autounit.definition.publish" if domain == "autounit" else "hal.driver.publish")
     item = await _package(db, domain, package_id)
     if item.status != "published": raise HTTPException(400, "只有已发布版本可以申请下架")
     if domain == "autounit" and await db.scalar(select(func.count()).select_from(EquipmentAutoUnitBinding).where(EquipmentAutoUnitBinding.package_id == item.id)):
@@ -439,6 +455,7 @@ async def submit_remove(kind: Literal["autounit", "drivers"], package_id: str, d
 async def active_reject(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     domain = "autounit" if kind == "autounit" else "driver"
     _require_any(user, *( (Permission.AUTOUNIT_MANAGE_DRAFT, Permission.AUTOUNIT_UPDATE) if domain == "autounit" else (Permission.DRIVER_MANAGE_DRAFT, Permission.DRIVER_UPDATE) ))
+    await require_fresh_sso_permission(user, "autounit.definition.publish" if domain == "autounit" else "hal.driver.publish")
     item = await _package(db, domain, package_id)
     if item.status in {"published", "removed", "pending_remove"}: raise HTTPException(400, "已发布版本只能申请下架")
     item.status, item.locked = "pending_testing", False
@@ -451,6 +468,7 @@ async def active_reject(kind: Literal["autounit", "drivers"], package_id: str, d
 async def delete_package(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     domain = "autounit" if kind == "autounit" else "driver"
     _require_any(user, *( (Permission.AUTOUNIT_MANAGE_DRAFT, Permission.AUTOUNIT_DELETE) if domain == "autounit" else (Permission.DRIVER_MANAGE_DRAFT, Permission.DRIVER_DELETE) ))
+    await require_fresh_sso_permission(user, "autounit.definition.publish" if domain == "autounit" else "hal.driver.publish")
     item = await _package(db, domain, package_id)
     if item.status != "pending_testing": raise HTTPException(400, "只有待测试版本可以直接删除")
     if domain == "autounit" and await db.scalar(select(func.count()).select_from(EquipmentAutoUnitBinding).where(EquipmentAutoUnitBinding.package_id == item.id)):
@@ -509,6 +527,7 @@ async def equipment_list(db: AsyncSession = Depends(get_db), user: User = Depend
 @router.post("/equipment/{equipment_id}/autounit-binding", response_model=Response[dict[str, Any]])
 async def bind_equipment(equipment_id: str, payload: dict[str, str] = Body(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     _require(user, Permission.BINDING_AUTOUNIT_MANAGE)
+    await require_fresh_sso_permission(user, "platform.equipment.update")
     equipment = await db.get(Equipment, equipment_id)
     package = await db.get(AutoUnitPackage, payload.get("packageVersionId"))
     if not equipment or equipment.is_deleted: raise HTTPException(404, "设备不存在")
@@ -526,6 +545,7 @@ async def bind_equipment(equipment_id: str, payload: dict[str, str] = Body(...),
 @router.delete("/equipment/{equipment_id}/autounit-binding", response_model=Response[None])
 async def unbind_equipment(equipment_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     _require(user, Permission.BINDING_AUTOUNIT_MANAGE)
+    await require_fresh_sso_permission(user, "platform.equipment.update")
     binding = await db.scalar(select(EquipmentAutoUnitBinding).where(EquipmentAutoUnitBinding.equipment_id == equipment_id))
     if not binding: raise HTTPException(404, "设备未绑定 AutoUnit")
     package = await db.get(AutoUnitPackage, binding.package_id)
@@ -555,6 +575,10 @@ async def approvals(type: str | None = None, db: AsyncSession = Depends(get_db),
     items = (await db.execute(query)).scalars().all()
     result = []
     for item in items:
+        if getattr(user, "auth_source", "local") == "sso" and item.action == "提交测试":
+            read_permission = "autounit.test.read" if item.target_kind == "autounit" else "hal.test.read"
+            if read_permission not in set(user.external_permissions):
+                continue
         package = await _package(db, item.target_kind, item.target_id)
         result.append(_approval_json(item, package))
     return Response(data=result)
@@ -565,6 +589,11 @@ async def review_approval(approval_id: str, decision: Literal["approve", "reject
     approval = await db.get(PublishApproval, approval_id)
     if not approval or approval.status != "pending": raise HTTPException(404, "待审批记录不存在")
     _require(user, Permission.APPROVAL_TEST_REVIEW if approval.action == "提交测试" else Permission.APPROVAL_RELEASE_REVIEW)
+    if approval.action == "提交测试":
+        external_permission = "autounit.test.approve" if approval.target_kind == "autounit" else "hal.test.approve"
+    else:
+        external_permission = "release.request.approve" if decision == "approve" else "release.request.reject"
+    await require_fresh_sso_permission(user, external_permission)
     item = await _package(db, approval.target_kind, approval.target_id)
     item.status = approval.approve_status if decision == "approve" else approval.reject_status
     if decision == "approve" and approval.action == "提交测试": item.locked = True

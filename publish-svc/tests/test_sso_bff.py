@@ -1,6 +1,6 @@
 import json
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 from urllib.parse import parse_qs, urlsplit
 
@@ -10,10 +10,12 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
 from app.core.database import Base
+from app.core.deps import require_fresh_sso_permission
 from app.core.permissions import Permission
 from app.core.sso import SsoClient
 from app.core.sso_permissions import map_sso_permissions
 from app.models.sso import SsoAuthTransaction, SsoSession
+from app.models.user import User
 
 
 class SsoBffTests(unittest.IsolatedAsyncioTestCase):
@@ -60,7 +62,7 @@ class SsoBffTests(unittest.IsolatedAsyncioTestCase):
             self.client._token_request = AsyncMock(return_value=tokens)
             self.client.verify_token = AsyncMock(side_effect=[
                 {"sub": "user-1", "token_use": "id", "nonce": transaction.nonce},
-                {"sub": "user-1", "token_use": "access", "exp": int((datetime.utcnow() + timedelta(hours=1)).timestamp())},
+                {"sub": "user-1", "token_use": "access", "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp())},
             ])
             self.client.userinfo = AsyncMock(return_value={
                 "sub": "user-1", "preferred_username": "tester", "name": "Tester",
@@ -85,7 +87,7 @@ class SsoBffTests(unittest.IsolatedAsyncioTestCase):
                 roles=[], permissions=[], permission_grants=[],
                 access_token=self.client.encrypt("old-access"),
                 refresh_token=self.client.encrypt("old-refresh"),
-                access_expires_at=datetime.utcnow() - timedelta(seconds=1),
+                access_expires_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=1),
             ))
             await db.commit()
             self.client._token_request = AsyncMock(return_value={
@@ -93,7 +95,7 @@ class SsoBffTests(unittest.IsolatedAsyncioTestCase):
             })
             self.client.verify_token = AsyncMock(return_value={
                 "sub": "user-1", "token_use": "access",
-                "exp": int((datetime.utcnow() + timedelta(hours=1)).timestamp()),
+                "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
             })
             self.client.userinfo = AsyncMock(return_value={
                 "roles": ["platform.user"], "permissions": [], "permission_grants": []
@@ -113,7 +115,7 @@ class SsoBffTests(unittest.IsolatedAsyncioTestCase):
             {"issuer": settings.SSO_ISSUER, "jwks_uri": "https://sso.test/jwks"},
             {"keys": [public_jwk]},
         ))
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         token = jwt.encode({
             "iss": settings.SSO_ISSUER, "aud": settings.SSO_CLIENT_ID,
             "sub": "user-1", "iat": now, "exp": now + timedelta(minutes=5),
@@ -124,12 +126,32 @@ class SsoBffTests(unittest.IsolatedAsyncioTestCase):
 
     def test_sso_permissions_are_mapped_without_local_role_lookup(self) -> None:
         mapped = map_sso_permissions(
-            ["autounit.definition.upload", "release.request.create"],
-            ["automation.developer"],
+            ["autounit.definition.publish"], ["release.manager"],
         )
         self.assertIn(Permission.AUTOUNIT_UPLOAD.value, mapped)
         self.assertIn(Permission.AUTOUNIT_SUBMIT_PUBLISH.value, mapped)
-        self.assertNotIn(Permission.AUTOUNIT_DELETE.value, mapped)
+        self.assertIn(Permission.AUTOUNIT_DELETE.value, mapped)
+        upload_only = map_sso_permissions(
+            ["autounit.definition.upload"], ["automation.developer"],
+        )
+        self.assertNotIn(Permission.AUTOUNIT_UPLOAD.value, upload_only)
+        hal_publish = map_sso_permissions(["hal.driver.publish"], ["release.manager"])
+        self.assertIn(Permission.DRIVER_UPLOAD.value, hal_publish)
+        hal_upload_only = map_sso_permissions(["hal.driver.upload"], ["custom.role"])
+        self.assertNotIn(Permission.DRIVER_UPLOAD.value, hal_upload_only)
+
+    async def test_high_risk_permission_uses_introspection_and_ignores_scope(self) -> None:
+        user = User(id="user-1", username="tester", password="", role=0, status="active")
+        user.auth_source = "sso"
+        user.external_permissions = ["hal.driver.publish"]
+        user.permission_grants = []
+        user.sso_access_token = "access-token"
+        with patch("app.core.deps.sso_client.introspect", new=AsyncMock(return_value={
+            "active": True, "sub": "user-1", "client_id": settings.SSO_CLIENT_ID,
+            "permissions": ["hal.driver.publish"], "permission_grants": [],
+        })) as introspect:
+            await require_fresh_sso_permission(user, "hal.driver.publish")
+            introspect.assert_awaited_once_with("access-token")
 
 
 if __name__ == "__main__":
