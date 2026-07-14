@@ -14,7 +14,14 @@
 
       <!-- 登录表单 -->
       <div class="bg-white rounded-2xl shadow-xl p-8">
+        <div v-if="userStore.authMode.mode === 'sso'" class="space-y-5">
+          <div class="text-sm text-gray-600 leading-6">账号、角色和权限由 Drivion SSO 统一管理。</div>
+          <a-button type="primary" size="large" class="w-full h-12" :loading="loading" @click="handleSsoLogin">
+            使用 SSO 登录
+          </a-button>
+        </div>
         <a-form
+          v-else
           :model="formState"
           @finish="handleLogin"
           layout="vertical"
@@ -76,7 +83,7 @@
           </a-button>
         </a-form>
 
-        <div class="mt-6 text-center text-sm text-gray-600">还没有账号？<router-link to="/register" class="text-blue-600 ml-1">立即注册</router-link></div>
+        <div v-if="userStore.authMode.registrationEnabled" class="mt-6 text-center text-sm text-gray-600">还没有账号？<router-link to="/register" class="text-blue-600 ml-1">立即注册</router-link></div>
       </div>
 
       <!-- 语言切换 -->
@@ -101,7 +108,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, computed } from 'vue'
+import { onMounted, reactive, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
@@ -122,6 +129,11 @@ const formState = reactive({
 
 const loading = ref(false)
 
+const handleSsoLogin = () => {
+  const url = userStore.authMode.ssoLoginUrl
+  if (url) window.location.assign(url)
+}
+
 const handleLogin = async () => {
   loading.value = true
   try {
@@ -139,4 +151,12 @@ const handleLocaleChange = (e: MenuInfo) => {
   locale.value = e.key as string
   localStorage.setItem('locale', e.key as string)
 }
+
+onMounted(async () => {
+  try {
+    await userStore.loadAuthMode()
+  } catch {
+    message.error('无法获取认证配置')
+  }
+})
 </script>

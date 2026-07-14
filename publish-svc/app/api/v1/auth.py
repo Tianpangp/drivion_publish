@@ -3,7 +3,10 @@
 """
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Query
+import httpx
+import jwt
+from fastapi import APIRouter, Cookie, Depends, HTTPException, status, Response, Query
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, select, or_, func
 from sqlalchemy.exc import SQLAlchemyError
@@ -13,8 +16,10 @@ from app.core.config import settings
 from app.core.deps import get_current_user, require_permissions
 from app.core.permissions import Permission, get_role_permissions
 from app.core.utils import generate_id
+from app.core.sso import SsoError, sso_client
 from app.models.log import OperationLog
 from app.models.user import User, Role, RoleRequest
+from app.models.sso import SsoSession
 from app.schemas.auth import (
     RegisterRequest, LoginRequest, LoginResponse, 
     TokenData, UserInfo, UserSearchResponse, UserListItem,
@@ -27,6 +32,11 @@ router = APIRouter()
 ASSIGNABLE_ROLES = {"developer", "tester", "release_manager", "engineer", "viewer"}
 
 
+def _require_local_mode() -> None:
+    if settings.auth_mode != "local":
+        raise HTTPException(404, "SSO 模式不提供内置账号接口")
+
+
 def _auth_log(db: AsyncSession, user: User, operation: str, description: str, target_id: str) -> None:
     db.add(OperationLog(
         id=generate_id("log"), operation=operation, module="用户管理",
@@ -36,11 +46,65 @@ def _auth_log(db: AsyncSession, user: User, operation: str, description: str, ta
     ))
 
 
+@router.get("/mode", response_model=CommonResponse[dict], summary="获取认证模式")
+async def auth_mode():
+    return CommonResponse(data={
+        "mode": settings.auth_mode,
+        "registrationEnabled": settings.auth_mode == "local",
+        "ssoLoginUrl": "/publish/api/v1/auth/sso/login" if settings.auth_mode == "sso" else None,
+    })
+
+
+@router.get("/sso/login", summary="发起 SSO 登录")
+async def sso_login(db: AsyncSession = Depends(get_db)):
+    if settings.auth_mode != "sso":
+        raise HTTPException(404, "当前未启用 SSO")
+    try:
+        transaction, authorize_url = await sso_client.create_auth_transaction(db)
+    except (SsoError, httpx.HTTPError) as exc:
+        raise HTTPException(502, "SSO 暂时不可用") from exc
+    response = RedirectResponse(authorize_url, status_code=302)
+    response.set_cookie(
+        settings.SSO_TRANSACTION_COOKIE_NAME, transaction, max_age=120,
+        httponly=True, secure=settings.SSO_COOKIE_SECURE, samesite="lax", path="/",
+    )
+    return response
+
+
+@router.get("/sso/callback", summary="SSO 登录回调")
+async def sso_callback(
+    code: Optional[str] = Query(None), state: Optional[str] = Query(None),
+    error: Optional[str] = Query(None),
+    transaction: Optional[str] = Cookie(None, alias=settings.SSO_TRANSACTION_COOKIE_NAME),
+    db: AsyncSession = Depends(get_db),
+):
+    frontend = settings.SSO_FRONTEND_REDIRECT_URI
+    if settings.auth_mode != "sso":
+        raise HTTPException(404, "当前未启用 SSO")
+    if error or not code or not state or not transaction:
+        return RedirectResponse(f"{frontend}?error=sso_login_failed", status_code=302)
+    try:
+        session_handle = await sso_client.complete_callback(db, transaction, state, code)
+    except (SsoError, httpx.HTTPError, jwt.PyJWTError):
+        response = RedirectResponse(f"{frontend}?error=sso_login_failed", status_code=302)
+        response.delete_cookie(settings.SSO_TRANSACTION_COOKIE_NAME, path="/")
+        return response
+    response = RedirectResponse(frontend, status_code=302)
+    response.set_cookie(
+        settings.SSO_SESSION_COOKIE_NAME, session_handle,
+        max_age=settings.SSO_SESSION_MAX_AGE_SECONDS, httponly=True,
+        secure=settings.SSO_COOKIE_SECURE, samesite="lax", path="/",
+    )
+    response.delete_cookie(settings.SSO_TRANSACTION_COOKIE_NAME, path="/")
+    return response
+
+
 @router.post("/register", response_model=CommonResponse[UserInfo], summary="用户注册")
 async def register(
     register_data: RegisterRequest,
     db: AsyncSession = Depends(get_db)
 ):
+    _require_local_mode()
     """
     用户注册接口
     
@@ -127,6 +191,7 @@ async def login(
     response: Response,
     db: AsyncSession = Depends(get_db)
 ):
+    _require_local_mode()
     """
     用户登录接口
     
@@ -271,13 +336,24 @@ def _mock_login(login_data: LoginRequest, response: Response) -> LoginResponse:
 @router.post("/logout", response_model=CommonResponse, summary="用户登出")
 async def logout(
     response: Response,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     用户登出接口
     
     清除 Cookie 中的 Token
     """
+    if settings.auth_mode == "sso":
+        try:
+            await sso_client.logout(current_user.sso_access_token)
+        except (SsoError, httpx.HTTPError):
+            pass
+        await db.execute(delete(SsoSession).where(SsoSession.id == current_user.sso_session_id))
+        _auth_log(db, current_user, "logout", "退出 SSO 登录", current_user.id)
+        response.delete_cookie(settings.SSO_SESSION_COOKIE_NAME, path="/")
+        return CommonResponse(code=200, message="退出成功", data=None)
+
     # 清除 Cookie
     response.delete_cookie(
         key=settings.COOKIE_NAME,
@@ -299,6 +375,14 @@ async def get_user_info(
     """
     获取当前登录用户的详细信息
     """
+    if getattr(current_user, "auth_source", "local") == "sso":
+        return CommonResponse(data=UserInfo(
+            id=current_user.id, username=current_user.username,
+            nickname=current_user.nickname, role=current_user.role_code,
+            roles=current_user.roles, email=current_user.email,
+            avatar=None, permissions=sorted(current_user.permission_codes), authMode="sso",
+        ))
+
     role_code = getattr(current_user, "role_code", None)
     if not role_code:
         role = await db.get(Role, current_user.role)
@@ -334,6 +418,7 @@ async def search_users(
     current_user: User = Depends(require_permissions(Permission.USER_VIEW.value)),
     db: AsyncSession = Depends(get_db)
 ):
+    _require_local_mode()
     """
     用户列表模糊搜索
     
@@ -423,6 +508,7 @@ async def get_roles(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
+    _require_local_mode()
     roles = (await db.execute(select(Role).where(Role.enabled == True).order_by(Role.id))).scalars().all()
     return CommonResponse(data=[{"code": item.code, "name": item.name, "description": item.description} for item in roles])
 
@@ -433,6 +519,7 @@ async def update_profile(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _require_local_mode()
     user = await db.get(User, current_user.id)
     if not user:
         raise HTTPException(404, "用户不存在")
@@ -454,6 +541,7 @@ async def change_password(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _require_local_mode()
     user = await db.get(User, current_user.id)
     if not user or not verify_password(payload.oldPassword, user.password):
         raise HTTPException(400, "原密码错误")
@@ -470,6 +558,7 @@ async def delete_account(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _require_local_mode()
     user = await db.get(User, current_user.id)
     if not user or not verify_password(payload.password, user.password):
         raise HTTPException(400, "密码错误")
@@ -491,6 +580,7 @@ async def apply_role(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permissions(Permission.USER_ROLE_REQUEST.value)),
 ):
+    _require_local_mode()
     if getattr(current_user, "role_code", "") == "admin":
         raise HTTPException(400, "管理员已拥有全部权限，无需申请角色")
     if payload.role not in ASSIGNABLE_ROLES:
@@ -516,6 +606,7 @@ def _role_request_json(item: RoleRequest, user: User) -> dict:
 
 @router.get("/role-requests/me", response_model=CommonResponse[list[dict]], summary="我的角色申请")
 async def my_role_requests(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _require_local_mode()
     items = (await db.execute(select(RoleRequest).where(RoleRequest.user_id == current_user.id).order_by(RoleRequest.created_at.desc()))).scalars().all()
     return CommonResponse(data=[_role_request_json(item, current_user) for item in items])
 
@@ -526,6 +617,7 @@ async def role_requests(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_permissions(Permission.USER_MANAGE.value)),
 ):
+    _require_local_mode()
     query = select(RoleRequest, User).join(User, RoleRequest.user_id == User.id)
     if request_status:
         query = query.where(RoleRequest.status == request_status)
@@ -541,6 +633,7 @@ async def review_role_request(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permissions(Permission.USER_MANAGE.value)),
 ):
+    _require_local_mode()
     if decision not in {"approve", "reject"}:
         raise HTTPException(400, "处理动作错误")
     item = await db.get(RoleRequest, request_id)
@@ -569,6 +662,7 @@ async def change_user_role(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permissions(Permission.USER_MANAGE.value)),
 ):
+    _require_local_mode()
     user = await db.get(User, user_id)
     role = await db.scalar(select(Role).where(Role.code == payload.role, Role.enabled == True))
     if not user or not role:
@@ -599,6 +693,7 @@ async def change_user_status(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permissions(Permission.USER_MANAGE.value)),
 ):
+    _require_local_mode()
     if payload.get("status") not in {"active", "inactive"}:
         raise HTTPException(400, "用户状态错误")
     user = await db.get(User, user_id)

@@ -36,7 +36,7 @@ service.interceptors.request.use(
     // 从 localStorage 获取 token
     const token = localStorage.getItem('token')
     
-    if (token && config.headers) {
+    if (token && token !== 'sso-session' && config.headers) {
       // 首次请求使用 Authorization 头
       config.headers.Authorization = `Bearer ${token}`
     }

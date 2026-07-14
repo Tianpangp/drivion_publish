@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.core.database import init_db, close_db
 from app.api.v1 import api_router
+from app.core.sso import sso_client
 
 
 @asynccontextmanager
@@ -17,6 +18,7 @@ async def lifespan(app: FastAPI):
     """
     # 启动时执行
     print("🚀 应用启动中...")
+    sso_client.validate_config()
     await init_db()
     print("✅ 应用启动完成")
     

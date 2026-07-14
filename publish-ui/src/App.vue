@@ -8,7 +8,11 @@ import { useUserStore } from './stores/user'
 
 const userStore = useUserStore()
 
-onMounted(() => {
-  userStore.loadUser()
+onMounted(async () => {
+  try {
+    await userStore.loadAuthMode()
+  } finally {
+    await userStore.loadUser()
+  }
 })
 </script>

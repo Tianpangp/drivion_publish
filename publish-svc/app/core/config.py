@@ -1,11 +1,37 @@
 """
 应用配置
 """
-from typing import List
+import os
+import tomllib
+from typing import Any, List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+
+
+CONFIG_PATH = Path(
+    os.getenv("PUBLISH_CONFIG_FILE", Path(__file__).resolve().parents[3] / "config.toml")
+).expanduser()
+
+
+def _load_toml() -> dict[str, Any]:
+    if not CONFIG_PATH.exists():
+        return {}
+    with CONFIG_PATH.open("rb") as config_file:
+        return tomllib.load(config_file)
+
+
+TOML_CONFIG = _load_toml()
+
+
+def _config(*path: str, default: Any = None) -> Any:
+    value: Any = TOML_CONFIG
+    for key in path:
+        if not isinstance(value, dict) or key not in value:
+            return default
+        value = value[key]
+    return value
 
 
 class Settings(BaseSettings):
@@ -15,22 +41,22 @@ class Settings(BaseSettings):
     APP_NAME: str = "发布系统后端服务"
     APP_VERSION: str = "1.0.0"
     APP_ENV: str = "development"
-    DEBUG: bool = True
+    DEBUG: bool = _config("server", "debug", default=True)
     
     # 服务器配置
-    HOST: str = "0.0.0.0"
-    PORT: int = 8001
+    HOST: str = _config("server", "host", default="0.0.0.0")
+    PORT: int = _config("server", "port", default=8001)
     
     # 数据库配置
     # DB_TYPE: mysql / sqlite / postgresql
-    DB_TYPE: str = "sqlite"
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 3306
-    DB_USER: str = "root"
-    DB_PASSWORD: str = ""
-    DB_NAME: str = "publish_system"
-    DB_CHARSET: str = "utf8mb4"
-    SQLITE_PATH: str = "./data/publish.db"
+    DB_TYPE: str = _config("database", "type", default="sqlite")
+    DB_HOST: str = _config("database", "host", default="localhost")
+    DB_PORT: int = _config("database", "port", default=3306)
+    DB_USER: str = _config("database", "username", default="root")
+    DB_PASSWORD: str = _config("database", "password", default="")
+    DB_NAME: str = _config("database", "name", default="publish_system")
+    DB_CHARSET: str = _config("database", "charset", default="utf8mb4")
+    SQLITE_PATH: str = _config("database", "sqlite_path", default="./data/publish.db")
     DATABASE_URL: str = ""
     
     # JWT 配置（RS256）
@@ -48,30 +74,51 @@ class Settings(BaseSettings):
     COOKIE_SAMESITE: str = "lax"
     
     # CORS 配置
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    CORS_ORIGINS: str | List[str] = _config(
+        "server", "cors_origins", default=["http://localhost:3000", "http://localhost:5173"]
+    )
     CORS_ALLOW_CREDENTIALS: bool = True
     
     # 文件上传配置
     UPLOAD_DIR: str = "./uploads"
     MAX_UPLOAD_SIZE: int = 1073741824  # 1GB
-    LOCAL_STORAGE_DIR: str = "./uploads/objects"
+    LOCAL_STORAGE_DIR: str = _config("storage", "local_dir", default="./uploads/objects")
     # OBJECT_STORAGE_PROVIDER: local / minio / s3
-    OBJECT_STORAGE_PROVIDER: str = "local"
+    OBJECT_STORAGE_PROVIDER: str = _config("storage", "provider", default="local")
     
     # MinIO 配置
-    MINIO_ENDPOINT: str = "192.168.3.68:9000"
-    MINIO_ACCESS_KEY: str = "minioadmin"
-    MINIO_SECRET_KEY: str = "minioadmin"
-    MINIO_BUCKET: str = "publish-system"
-    MINIO_SECURE: bool = False  # 是否使用 HTTPS
+    MINIO_ENDPOINT: str = str(_config("storage", "endpoint", default="http://192.168.3.68:9000")).removeprefix("http://").removeprefix("https://")
+    MINIO_ACCESS_KEY: str = _config("storage", "access_key", default="minioadmin")
+    MINIO_SECRET_KEY: str = _config("storage", "secret_key", default="minioadmin")
+    MINIO_BUCKET: str = _config("storage", "bucket", default="publish-system")
+    MINIO_SECURE: bool = _config("storage", "secure", default=False)
 
     # S3 兼容对象存储配置（MinIO 也可复用这组配置）
-    S3_ENDPOINT_URL: str = ""
-    S3_ACCESS_KEY_ID: str = ""
-    S3_SECRET_ACCESS_KEY: str = ""
-    S3_BUCKET: str = "publish-system"
-    S3_REGION: str = "us-east-1"
-    S3_SECURE: bool = True
+    S3_ENDPOINT_URL: str = _config("storage", "endpoint", default="")
+    S3_ACCESS_KEY_ID: str = _config("storage", "access_key", default="")
+    S3_SECRET_ACCESS_KEY: str = _config("storage", "secret_key", default="")
+    S3_BUCKET: str = _config("storage", "bucket", default="publish-system")
+    S3_REGION: str = _config("storage", "region", default="us-east-1")
+    S3_SECURE: bool = _config("storage", "secure", default=True)
+
+    # 认证配置
+    AUTH_MODE: str = _config("auth", "mode", default="local")
+    SSO_ISSUER: str = _config("auth", "sso", "issuer", default="http://localhost:8002")
+    SSO_CLIENT_ID: str = _config("auth", "sso", "client_id", default="release")
+    SSO_CLIENT_SECRET: str = ""
+    SSO_CLIENT_SECRET_ENV: str = _config("auth", "sso", "client_secret_env", default="RELEASE_OIDC_CLIENT_SECRET")
+    SSO_SCOPE: str = _config("auth", "sso", "scope", default="openid profile")
+    SSO_REDIRECT_URI: str = _config("auth", "sso", "redirect_uri", default="http://localhost:8001/publish/api/v1/auth/sso/callback")
+    SSO_FRONTEND_REDIRECT_URI: str = _config("auth", "sso", "frontend_redirect_uri", default="http://localhost:5173/auth/callback")
+    SSO_SESSION_SECRET: str = ""
+    SSO_SESSION_SECRET_ENV: str = _config("auth", "sso", "session_secret_env", default="PUBLISH_SSO_SESSION_SECRET")
+    SSO_SESSION_COOKIE_NAME: str = _config("auth", "sso", "session_cookie_name", default="publish_sso_session")
+    SSO_TRANSACTION_COOKIE_NAME: str = _config("auth", "sso", "transaction_cookie_name", default="publish_sso_transaction")
+    SSO_COOKIE_SECURE: bool = _config("auth", "sso", "cookie_secure", default=False)
+    SSO_SESSION_MAX_AGE_SECONDS: int = _config("auth", "sso", "session_max_age_seconds", default=604800)
+    SSO_REFRESH_BEFORE_EXPIRY_SECONDS: int = _config("auth", "sso", "refresh_before_expiry_seconds", default=60)
+    SSO_HTTP_TIMEOUT_SECONDS: int = _config("auth", "sso", "http_timeout_seconds", default=10)
+    SSO_INTROSPECT_HIGH_RISK: bool = _config("auth", "sso", "introspect_high_risk", default=True)
     
     # 日志配置
     LOG_LEVEL: str = "INFO"
@@ -100,7 +147,24 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> List[str]:
         """CORS允许的源列表"""
+        if isinstance(self.CORS_ORIGINS, list):
+            return self.CORS_ORIGINS
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
+
+    @property
+    def auth_mode(self) -> str:
+        mode = self.AUTH_MODE.lower()
+        if mode not in {"local", "sso"}:
+            raise ValueError("AUTH_MODE 只支持 local 或 sso")
+        return mode
+
+    @property
+    def sso_client_secret(self) -> str:
+        return self.SSO_CLIENT_SECRET or os.getenv(self.SSO_CLIENT_SECRET_ENV, "")
+
+    @property
+    def sso_session_secret(self) -> str:
+        return self.SSO_SESSION_SECRET or os.getenv(self.SSO_SESSION_SECRET_ENV, "")
     
     @property
     def jwt_private_key(self) -> str:

@@ -17,8 +17,8 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
-from app.core.permissions import Permission, has_permission
+from app.core.deps import get_current_user, user_has_permission
+from app.core.permissions import Permission
 from app.core.storage import storage
 from app.core.utils import format_datetime, generate_id
 from app.models.facility import Equipment, Factory, Line, Station
@@ -33,12 +33,12 @@ MAX_UPLOAD_SIZE = 100 * 1024 * 1024
 
 
 def _require(user: User, permission: Permission) -> None:
-    if not has_permission(getattr(user, "role_code", ""), permission.value):
+    if not user_has_permission(user, permission.value):
         raise HTTPException(403, f"无操作权限: {permission.value}")
 
 
 def _require_any(user: User, *permissions: Permission) -> None:
-    if not any(has_permission(getattr(user, "role_code", ""), item.value) for item in permissions):
+    if not any(user_has_permission(user, item.value) for item in permissions):
         raise HTTPException(403, "无操作权限")
 
 
@@ -308,14 +308,14 @@ async def _save_autounit(file: UploadFile, db: AsyncSession, user: User, existin
 
 @router.post("/autounit/packages/upload", response_model=Response[dict[str, Any]])
 async def upload_autounit(file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    _require(user, Permission.AUTOUNIT_MANAGE_DRAFT)
+    _require_any(user, Permission.AUTOUNIT_MANAGE_DRAFT, Permission.AUTOUNIT_UPLOAD)
     item = await _save_autounit(file, db, user)
     return Response(data=await _autounit_json(db, item), message="上传成功")
 
 
 @router.put("/autounit/packages/{package_id}/upload", response_model=Response[dict[str, Any]])
 async def replace_autounit(package_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    _require(user, Permission.AUTOUNIT_MANAGE_DRAFT)
+    _require_any(user, Permission.AUTOUNIT_MANAGE_DRAFT, Permission.AUTOUNIT_UPDATE)
     item = await db.get(AutoUnitPackage, package_id)
     if not item: raise HTTPException(404, "AutoUnit 版本不存在")
     item = await _save_autounit(file, db, user, item)
@@ -361,14 +361,14 @@ async def _save_driver(file: UploadFile, db: AsyncSession, user: User, existing:
 
 @router.post("/drivers/packages/upload", response_model=Response[dict[str, Any]])
 async def upload_driver(file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    _require(user, Permission.DRIVER_MANAGE_DRAFT)
+    _require_any(user, Permission.DRIVER_MANAGE_DRAFT, Permission.DRIVER_UPLOAD)
     item = await _save_driver(file, db, user)
     return Response(data=_driver_json(item), message="上传成功")
 
 
 @router.put("/drivers/packages/{package_id}/upload", response_model=Response[dict[str, Any]])
 async def replace_driver(package_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    _require(user, Permission.DRIVER_MANAGE_DRAFT)
+    _require_any(user, Permission.DRIVER_MANAGE_DRAFT, Permission.DRIVER_UPDATE)
     item = await db.get(DriverPackage, package_id)
     if not item: raise HTTPException(404, "HAL 版本不存在")
     item = await _save_driver(file, db, user, item)
@@ -438,7 +438,7 @@ async def submit_remove(kind: Literal["autounit", "drivers"], package_id: str, d
 @router.post("/{kind}/packages/{package_id}/reject", response_model=Response[None])
 async def active_reject(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     domain = "autounit" if kind == "autounit" else "driver"
-    _require(user, Permission.AUTOUNIT_MANAGE_DRAFT if domain == "autounit" else Permission.DRIVER_MANAGE_DRAFT)
+    _require_any(user, *( (Permission.AUTOUNIT_MANAGE_DRAFT, Permission.AUTOUNIT_UPDATE) if domain == "autounit" else (Permission.DRIVER_MANAGE_DRAFT, Permission.DRIVER_UPDATE) ))
     item = await _package(db, domain, package_id)
     if item.status in {"published", "removed", "pending_remove"}: raise HTTPException(400, "已发布版本只能申请下架")
     item.status, item.locked = "pending_testing", False
@@ -450,7 +450,7 @@ async def active_reject(kind: Literal["autounit", "drivers"], package_id: str, d
 @router.delete("/{kind}/packages/{package_id}", response_model=Response[None])
 async def delete_package(kind: Literal["autounit", "drivers"], package_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     domain = "autounit" if kind == "autounit" else "driver"
-    _require(user, Permission.AUTOUNIT_MANAGE_DRAFT if domain == "autounit" else Permission.DRIVER_MANAGE_DRAFT)
+    _require_any(user, *( (Permission.AUTOUNIT_MANAGE_DRAFT, Permission.AUTOUNIT_DELETE) if domain == "autounit" else (Permission.DRIVER_MANAGE_DRAFT, Permission.DRIVER_DELETE) ))
     item = await _package(db, domain, package_id)
     if item.status != "pending_testing": raise HTTPException(400, "只有待测试版本可以直接删除")
     if domain == "autounit" and await db.scalar(select(func.count()).select_from(EquipmentAutoUnitBinding).where(EquipmentAutoUnitBinding.package_id == item.id)):
@@ -545,8 +545,8 @@ async def approvals(type: str | None = None, db: AsyncSession = Depends(get_db),
     _require_any(user, Permission.APPROVAL_TEST_VIEW, Permission.APPROVAL_RELEASE_VIEW)
     query = select(PublishApproval).where(PublishApproval.status == "pending").order_by(PublishApproval.submitted_at.desc())
     role_code = getattr(user, "role_code", "")
-    can_test = has_permission(role_code, Permission.APPROVAL_TEST_VIEW.value)
-    can_release = has_permission(role_code, Permission.APPROVAL_RELEASE_VIEW.value)
+    can_test = user_has_permission(user, Permission.APPROVAL_TEST_VIEW.value)
+    can_release = user_has_permission(user, Permission.APPROVAL_RELEASE_VIEW.value)
     if can_test and not can_release:
         query = query.where(PublishApproval.action == "提交测试")
     elif can_release and not can_test:

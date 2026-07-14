@@ -1,0 +1,49 @@
+# Drivion 发布系统配置。修改后需要重启后端服务。
+
+[server]
+host = "0.0.0.0"
+port = 8001
+debug = true
+cors_origins = ["http://localhost:5173"]
+
+[database]
+# sqlite / mysql / postgresql，也可以使用 PUBLISH_DATABASE_URL 环境变量覆盖。
+type = "sqlite"
+sqlite_path = "./data/publish.db"
+host = "localhost"
+port = 3306
+name = "publish_system"
+username = "root"
+password = ""
+charset = "utf8mb4"
+
+[storage]
+# local / minio / s3
+provider = "local"
+local_dir = "./uploads/objects"
+endpoint = "http://192.168.3.68:9000"
+access_key = "minioadmin"
+secret_key = "minioadmin"
+bucket = "publish-system"
+region = "us-east-1"
+secure = false
+
+[auth]
+# local 使用发布系统内置账号；sso 使用 Drivion SSO OIDC BFF 登录。
+mode = "local"
+
+[auth.sso]
+issuer = "http://localhost:8002"
+client_id = "release"
+client_secret_env = "RELEASE_OIDC_CLIENT_SECRET"
+scope = "openid profile"
+redirect_uri = "http://localhost:8001/publish/api/v1/auth/sso/callback"
+frontend_redirect_uri = "http://localhost:5173/auth/callback"
+session_secret_env = "PUBLISH_SSO_SESSION_SECRET"
+session_cookie_name = "publish_sso_session"
+transaction_cookie_name = "publish_sso_transaction"
+cookie_secure = false
+session_max_age_seconds = 604800
+refresh_before_expiry_seconds = 60
+http_timeout_seconds = 10
+introspect_high_risk = true

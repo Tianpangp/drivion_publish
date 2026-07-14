@@ -6,7 +6,7 @@
         <h1 class="text-2xl font-bold text-gray-800">{{ t('autounit.title') }}</h1>
         <p class="text-gray-500 mt-1">上传、审批和管理设备执行逻辑包，AutoUnit 最终绑定到具体设备</p>
       </div>
-      <a-button v-if="canManage" type="primary" @click="showUploadModal()">
+      <a-button v-if="canUpload" type="primary" @click="showUploadModal()">
         <template #icon>
           <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -102,8 +102,8 @@
               @click="handleSubmitTesting(pkg.id)">
               提交测试
             </a-button>
-            <a-button v-if="canManage && pkg.status === 'pending_testing'" size="small" @click="showUploadModal(pkg.id)">更新</a-button>
-            <a-button v-if="canManage && pkg.status === 'pending_testing'" size="small" danger @click="handleDelete(pkg.id)">删除</a-button>
+            <a-button v-if="canUpdate && pkg.status === 'pending_testing'" size="small" @click="showUploadModal(pkg.id)">更新</a-button>
+            <a-button v-if="canDelete && pkg.status === 'pending_testing'" size="small" danger @click="handleDelete(pkg.id)">删除</a-button>
             <a-button v-if="canSubmitPublish && (pkg.status === 'testing' || pkg.status === 'removed')" size="small" type="primary"
               @click="handleSubmitPublish(pkg.id)">
               {{ pkg.status === 'removed' ? '重新上架' : '提交发布' }}
@@ -163,6 +163,9 @@ import { useUserStore } from '../stores/user'
 const { t } = useI18n()
 const userStore = useUserStore()
 const canManage = computed(() => userStore.hasPermission('autounit:manage_draft'))
+const canUpload = computed(() => canManage.value || userStore.hasPermission('autounit:upload'))
+const canUpdate = computed(() => canManage.value || userStore.hasPermission('autounit:update'))
+const canDelete = computed(() => canManage.value || userStore.hasPermission('autounit:delete'))
 const canSubmitTest = computed(() => userStore.hasPermission('autounit:submit_test'))
 const canSubmitPublish = computed(() => userStore.hasPermission('autounit:submit_publish'))
 const canSubmitRemove = computed(() => userStore.hasPermission('autounit:submit_remove'))
@@ -215,7 +218,7 @@ const getStatusColor = (status: string) => {
 }
 
 const canReject = (status: string) => {
-  return canManage.value && ['testing', 'pending_publish'].includes(status)
+  return canUpdate.value && ['testing', 'pending_publish'].includes(status)
 }
 
 const getStatusName = (status: string) => {

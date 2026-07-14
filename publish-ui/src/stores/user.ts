@@ -1,12 +1,20 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as authApi from '../api/auth'
-import type { UserInfo } from '../api/auth'
+import type { AuthModeInfo, UserInfo } from '../api/auth'
 
 export const useUserStore = defineStore('user', () => {
   const user = ref<UserInfo | null>(null)
   const token = ref<string | null>(localStorage.getItem('token'))
   const permissions = ref<string[]>([])
+  const authMode = ref<AuthModeInfo>({ mode: 'local', registrationEnabled: true })
+
+  const loadAuthMode = async () => {
+    const response = await authApi.getAuthMode()
+    authMode.value = response.data
+    localStorage.setItem('authMode', response.data.mode)
+    return response.data
+  }
 
   // 登录
   const login = async (username: string, password: string) => {
@@ -28,6 +36,16 @@ export const useUserStore = defineStore('user', () => {
       console.error('登录失败:', error)
       throw error
     }
+  }
+
+  const completeSsoLogin = async () => {
+    const response = await authApi.getUserInfo()
+    token.value = 'sso-session'
+    user.value = response.data
+    permissions.value = response.data.permissions
+    localStorage.setItem('token', 'sso-session')
+    localStorage.setItem('user', JSON.stringify(response.data))
+    localStorage.removeItem('tokenExpires')
   }
 
   // 登出
@@ -117,7 +135,10 @@ export const useUserStore = defineStore('user', () => {
     user,
     token,
     permissions,
+    authMode,
+    loadAuthMode,
     login,
+    completeSsoLogin,
     logout,
     clearLocal,
     setUser,

@@ -37,6 +37,8 @@ class UserInfo(BaseModel):
     email: Optional[str] = None
     avatar: Optional[str] = None
     permissions: List[str] = []
+    roles: List[str] = []
+    authMode: str = "local"
     
     class Config:
         from_attributes = True

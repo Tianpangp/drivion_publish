@@ -5,7 +5,7 @@
         <h1 class="text-2xl font-bold text-gray-800">{{ t('drivers.title') }}</h1>
         <p class="text-gray-500 mt-1">上传、审批和管理 HAL 驱动包版本；HAL 由 AutoUnit 在 Exe 中调用</p>
       </div>
-      <a-button v-if="canManage" type="primary" @click="showUploadModal()">{{ t('drivers.upload') }}</a-button>
+      <a-button v-if="canUpload" type="primary" @click="showUploadModal()">{{ t('drivers.upload') }}</a-button>
     </div>
 
     <div class="bg-white rounded-xl p-4 shadow-sm">
@@ -63,8 +63,8 @@
 
           <div class="flex flex-wrap gap-2 pt-4 border-t">
             <a-button v-if="canSubmitTest && pkg.status === 'pending_testing'" size="small" type="primary" @click="handleSubmitTesting(pkg.id)">提交测试</a-button>
-            <a-button v-if="canManage && pkg.status === 'pending_testing'" size="small" @click="showUploadModal(pkg.id)">更新</a-button>
-            <a-button v-if="canManage && pkg.status === 'pending_testing'" size="small" danger @click="handleDelete(pkg.id)">删除</a-button>
+            <a-button v-if="canUpdate && pkg.status === 'pending_testing'" size="small" @click="showUploadModal(pkg.id)">更新</a-button>
+            <a-button v-if="canDelete && pkg.status === 'pending_testing'" size="small" danger @click="handleDelete(pkg.id)">删除</a-button>
             <a-button v-if="canSubmitPublish && (pkg.status === 'testing' || pkg.status === 'removed')" size="small" type="primary" @click="handleSubmitPublish(pkg.id)">
               {{ pkg.status === 'removed' ? '重新上架' : '提交发布' }}
             </a-button>
@@ -112,6 +112,9 @@ import { useUserStore } from '../stores/user'
 const { t } = useI18n()
 const userStore = useUserStore()
 const canManage = computed(() => userStore.hasPermission('driver:manage_draft'))
+const canUpload = computed(() => canManage.value || userStore.hasPermission('driver:upload'))
+const canUpdate = computed(() => canManage.value || userStore.hasPermission('driver:update'))
+const canDelete = computed(() => canManage.value || userStore.hasPermission('driver:delete'))
 const canSubmitTest = computed(() => userStore.hasPermission('driver:submit_test'))
 const canSubmitPublish = computed(() => userStore.hasPermission('driver:submit_publish'))
 const canSubmitRemove = computed(() => userStore.hasPermission('driver:submit_remove'))
@@ -159,7 +162,7 @@ const getStatusColor = (status: string) => {
 }
 
 const canReject = (status: string) => {
-  return canManage.value && ['testing', 'pending_publish'].includes(status)
+  return canUpdate.value && ['testing', 'pending_publish'].includes(status)
 }
 
 const getStatusName = (status: string) => t(`drivers.${status}`)

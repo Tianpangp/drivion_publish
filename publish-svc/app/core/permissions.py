@@ -45,6 +45,7 @@ class Permission(str, Enum):
     # ========== AutoUnit 包管理权限 ==========
     AUTOUNIT_VIEW = "autounit:view"                          # 查看 AutoUnit 包
     AUTOUNIT_UPLOAD = "autounit:upload"                      # 上传 AutoUnit 包
+    AUTOUNIT_UPDATE = "autounit:update"
     AUTOUNIT_DOWNLOAD = "autounit:download"                  # 下载 AutoUnit 包
     AUTOUNIT_DELETE = "autounit:delete"                      # 删除 AutoUnit 包
     AUTOUNIT_PUBLISH = "autounit:publish"                    # 发布 AutoUnit 包
@@ -58,6 +59,7 @@ class Permission(str, Enum):
     # ========== 驱动包管理权限 ==========
     DRIVER_VIEW = "driver:view"                              # 查看驱动包
     DRIVER_UPLOAD = "driver:upload"                          # 上传驱动包
+    DRIVER_UPDATE = "driver:update"
     DRIVER_DOWNLOAD = "driver:download"                      # 下载驱动包
     DRIVER_DELETE = "driver:delete"                          # 删除驱动包
     DRIVER_PUBLISH = "driver:publish"                        # 发布驱动包
@@ -135,6 +137,7 @@ PERMISSION_DESCRIPTIONS: Dict[str, str] = {
     # AutoUnit 包管理
     Permission.AUTOUNIT_VIEW: "查看 AutoUnit 包列表和详情",
     Permission.AUTOUNIT_UPLOAD: "上传新的 AutoUnit 包",
+    Permission.AUTOUNIT_UPDATE: "更新待测试 AutoUnit 包",
     Permission.AUTOUNIT_DOWNLOAD: "下载 AutoUnit 包",
     Permission.AUTOUNIT_DELETE: "删除 AutoUnit 包",
     Permission.AUTOUNIT_PUBLISH: "发布 AutoUnit 包",
@@ -144,6 +147,7 @@ PERMISSION_DESCRIPTIONS: Dict[str, str] = {
     # 驱动包管理
     Permission.DRIVER_VIEW: "查看驱动包列表和详情",
     Permission.DRIVER_UPLOAD: "上传新的驱动包",
+    Permission.DRIVER_UPDATE: "更新待测试驱动包",
     Permission.DRIVER_DOWNLOAD: "下载驱动包",
     Permission.DRIVER_DELETE: "删除驱动包",
     Permission.DRIVER_PUBLISH: "发布驱动包",

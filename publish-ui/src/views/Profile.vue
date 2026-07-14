@@ -4,7 +4,18 @@
 
     <a-alert v-if="isMockAccount" type="warning" show-icon message="当前为开发模拟账号" description="模拟账号仅用于登录和调试，不保存个人资料、角色申请或密码变更。" />
 
-    <section v-if="!isMockAccount" class="bg-white border border-gray-200 rounded-lg p-6">
+    <section v-if="isSso" class="bg-white border border-gray-200 rounded-lg p-6">
+      <h2 class="text-base font-semibold mb-5">SSO 身份信息</h2>
+      <a-descriptions :column="1" bordered size="small">
+        <a-descriptions-item label="用户名">{{ userStore.user?.username }}</a-descriptions-item>
+        <a-descriptions-item label="昵称">{{ userStore.user?.nickname || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="邮箱">{{ userStore.user?.email || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="角色">{{ userStore.user?.roles?.join('、') || userStore.user?.role }}</a-descriptions-item>
+      </a-descriptions>
+      <p class="text-sm text-gray-500 mt-4">个人资料、密码、账号状态和角色授权由 Drivion SSO 统一管理。</p>
+    </section>
+
+    <section v-if="!isMockAccount && !isSso" class="bg-white border border-gray-200 rounded-lg p-6">
       <h2 class="text-base font-semibold mb-5">个人资料</h2>
       <a-form layout="vertical" :model="profile" class="max-w-xl" @finish="saveProfile">
         <a-form-item label="用户名"><a-input :value="userStore.user?.username" disabled /></a-form-item>
@@ -14,7 +25,7 @@
       </a-form>
     </section>
 
-    <section v-if="!isMockAccount" class="bg-white border border-gray-200 rounded-lg p-6">
+    <section v-if="!isMockAccount && !isSso" class="bg-white border border-gray-200 rounded-lg p-6">
       <h2 class="text-base font-semibold mb-1">角色权限</h2>
       <p class="text-sm text-gray-500 mb-5">当前角色：{{ roleName(userStore.user?.role) }}</p>
       <a-form layout="vertical" :model="roleForm" class="max-w-xl" @finish="submitRoleRequest">
@@ -25,7 +36,7 @@
       <a-table class="mt-6" size="small" :data-source="requests" :columns="requestColumns" row-key="id" :pagination="false" />
     </section>
 
-    <section v-if="!isMockAccount" class="bg-white border border-gray-200 rounded-lg p-6">
+    <section v-if="!isMockAccount && !isSso" class="bg-white border border-gray-200 rounded-lg p-6">
       <h2 class="text-base font-semibold mb-5">修改密码</h2>
       <a-form layout="vertical" :model="passwordForm" class="max-w-xl" @finish="savePassword">
         <a-form-item label="原密码" required><a-input-password v-model:value="passwordForm.oldPassword" /></a-form-item>
@@ -34,7 +45,7 @@
       </a-form>
     </section>
 
-    <section v-if="!isMockAccount" class="bg-white border border-red-200 rounded-lg p-6">
+    <section v-if="!isMockAccount && !isSso" class="bg-white border border-red-200 rounded-lg p-6">
       <h2 class="text-base font-semibold text-red-700">注销账号</h2>
       <p class="text-sm text-gray-600 mt-2 mb-4">账号和个人资料将被永久删除，历史操作日志仍会保留。此操作不可恢复。</p>
       <a-button danger @click="confirmDelete">注销账号</a-button>
@@ -61,10 +72,11 @@ const roleForm = reactive<{ role?: RoleCode; reason: string }>({ reason: '' })
 const passwordForm = reactive({ oldPassword: '', newPassword: '' })
 const deleteModalOpen = ref(false); const deletePassword = ref('')
 const isMockAccount = computed(() => userStore.user?.id.startsWith('mock-') ?? false)
+const isSso = computed(() => userStore.user?.authMode === 'sso')
 const requestColumns = [{ title: '申请角色', dataIndex: 'requestedRole' }, { title: '状态', dataIndex: 'status' }, { title: '申请时间', dataIndex: 'createdAt' }]
 const roleOptions = computed(() => roles.value.filter(r => r.code !== 'admin' && r.code !== userStore.user?.role).map(r => ({ value: r.code, label: r.name })))
 const roleName = (code?: string) => roles.value.find(r => r.code === code)?.name || code || '-'
-const load = async () => { if (isMockAccount.value) return; const [roleRes, requestRes] = await Promise.all([authApi.getRoles(), authApi.getMyRoleRequests()]); roles.value = roleRes.data; requests.value = requestRes.data }
+const load = async () => { if (isMockAccount.value || isSso.value) return; const [roleRes, requestRes] = await Promise.all([authApi.getRoles(), authApi.getMyRoleRequests()]); roles.value = roleRes.data; requests.value = requestRes.data }
 const saveProfile = async () => { const res = await authApi.updateProfile({ nickname: profile.nickname, email: profile.email || undefined }); userStore.setUser(res.data); message.success('资料已保存') }
 const submitRoleRequest = async () => { if (!roleForm.role) return; await authApi.applyRole(roleForm.role, roleForm.reason); roleForm.role = undefined; roleForm.reason = ''; await load(); message.success('角色申请已提交') }
 const savePassword = async () => { await authApi.changePassword(passwordForm); passwordForm.oldPassword = ''; passwordForm.newPassword = ''; message.success('密码已修改') }

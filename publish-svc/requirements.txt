@@ -9,6 +9,7 @@ email-validator==2.1.0
 fastapi==0.109.0
 fastapi-cors==0.0.6
 greenlet>=3.0.0
+httpx>=0.28.0,<1.0.0
 loguru==0.7.2
 minio==7.2.7
 passlib==1.7.4

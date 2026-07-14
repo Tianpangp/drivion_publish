@@ -13,6 +13,7 @@ from app.models.binding import (
 )
 from app.models.log import OperationLog
 from app.models.publish import EquipmentAutoUnitBinding, EquipmentBindingHistory, PublishApproval
+from app.models.sso import SsoAuthTransaction, SsoSession
 
 __all__ = [
     "User",
@@ -33,4 +34,6 @@ __all__ = [
     "EquipmentAutoUnitBinding",
     "EquipmentBindingHistory",
     "PublishApproval",
+    "SsoAuthTransaction",
+    "SsoSession",
 ]

@@ -10,6 +10,14 @@ export interface UserInfo {
   email?: string
   avatar?: string
   permissions: string[]
+  roles?: string[]
+  authMode?: 'local' | 'sso'
+}
+
+export interface AuthModeInfo {
+  mode: 'local' | 'sso'
+  registrationEnabled: boolean
+  ssoLoginUrl?: string
 }
 
 export type RoleCode = 'admin' | 'developer' | 'tester' | 'release_manager' | 'engineer' | 'viewer'
@@ -58,6 +66,10 @@ export function login(data: LoginRequest) {
     method: 'post',
     data
   })
+}
+
+export function getAuthMode() {
+  return request<ApiResponse<AuthModeInfo>>({ url: '/auth/mode', method: 'get' })
 }
 
 // 用户注册

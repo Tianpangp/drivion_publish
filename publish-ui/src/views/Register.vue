@@ -23,12 +23,14 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import * as authApi from '../api/auth'
+import { useUserStore } from '../stores/user'
 
 const router = useRouter()
+const userStore = useUserStore()
 const loading = ref(false)
 const form = reactive({ username: '', nickname: '', email: '', password: '', confirmPassword: '' })
 const validateConfirm = async (_rule: unknown, value: string) => {
@@ -44,4 +46,8 @@ const submit = async () => {
     router.push('/login')
   } finally { loading.value = false }
 }
+onMounted(async () => {
+  const mode = await userStore.loadAuthMode()
+  if (!mode.registrationEnabled) await router.replace('/login')
+})
 </script>
