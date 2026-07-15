@@ -43,3 +43,31 @@ class ExeBundleResponse(BaseModel):
     interfaces: List[ExeArtifactInfo] = Field(default_factory=list)
     generatedAt: str
     warnings: List[str] = Field(default_factory=list)
+
+
+class ExeEquipmentInfo(BaseModel):
+    id: str
+    name: str
+    code: Optional[str] = None
+    status: str
+    equipmentType: Optional[str] = None
+    vendor: Optional[str] = None
+    model: Optional[str] = None
+    station: dict[str, Any]
+    line: dict[str, Any]
+    site: dict[str, Any]
+
+
+class ExeAutoUnitInfo(ExeArtifactInfo):
+    packageId: str
+    module: str
+    published: bool
+    releaseWarning: Optional[str] = None
+
+
+class ExeEquipmentDeployment(BaseModel):
+    equipment: ExeEquipmentInfo
+    autoUnit: Optional[ExeAutoUnitInfo] = None
+    boundAt: Optional[str] = None
+    revision: str
+    generatedAt: str

@@ -173,6 +173,9 @@ secure = false
 # sso: 使用 Drivion SSO
 mode = "local"
 
+[integration]
+api_key_env = "PUBLISH_INTEGRATION_API_KEY"
+
 [auth.sso]
 issuer = "http://localhost:8002"
 client_id = "release"
@@ -198,6 +201,21 @@ introspect_high_risk = true
 | `server.port` | 后端端口，默认 `8001` |
 | `server.debug` | 调试开关，生产环境应设为 `false` |
 | `server.cors_origins` | 允许访问 API 的前端 Origin 列表，需填写完整的协议、主机和端口 |
+
+### Exe / DevKit 接口配置
+
+Publish 使用内置认证时，Exe Runtime 和 DevKit 通过独立 API Key 访问对外接口：
+
+```toml
+[integration]
+api_key_env = "PUBLISH_INTEGRATION_API_KEY"
+```
+
+```bash
+export PUBLISH_INTEGRATION_API_KEY="$(openssl rand -hex 32)"
+```
+
+SSO 模式下对外接口改用 OIDC Bearer Access Token，不使用该 API Key。完整的 Exe 拉取、DevKit 提交、Permission 和 scope 说明见 [对外接入文档](./docs/README.md)。
 
 ### 数据库配置
 
@@ -467,6 +485,7 @@ GET /publish/api/v1/exe/stations/demo-station/bundle
 ---
 
 > **相关文档**  
+> - [对外接入文档](./docs/README.md)
 > - [Drivion 商业计划书 & 架构设计](../Drivion%20项目%20商业计划书%20·%20架构设计.md)  
 > - [API 文档](./API文档.md)  
 > - [后端 README](./publish-svc/README.md)  

@@ -32,6 +32,11 @@ secure = false
 # local 使用发布系统内置账号；sso 使用 Drivion SSO OIDC BFF 登录。
 mode = "local"
 
+[integration]
+# local 认证模式下，Exe/DevKit 通过该环境变量中的 API Key 访问对外接口。
+# sso 模式下使用 OIDC Bearer Access Token，不使用此 API Key。
+api_key_env = "PUBLISH_INTEGRATION_API_KEY"
+
 [auth.sso]
 issuer = "http://localhost:8002"
 client_id = "release"

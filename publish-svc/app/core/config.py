@@ -119,6 +119,12 @@ class Settings(BaseSettings):
     SSO_REFRESH_BEFORE_EXPIRY_SECONDS: int = _config("auth", "sso", "refresh_before_expiry_seconds", default=60)
     SSO_HTTP_TIMEOUT_SECONDS: int = _config("auth", "sso", "http_timeout_seconds", default=10)
     SSO_INTROSPECT_HIGH_RISK: bool = _config("auth", "sso", "introspect_high_risk", default=True)
+
+    # Exe / DevKit 机器间接口（local 模式）
+    INTEGRATION_API_KEY: str = ""
+    INTEGRATION_API_KEY_ENV: str = _config(
+        "integration", "api_key_env", default="PUBLISH_INTEGRATION_API_KEY"
+    )
     
     # 日志配置
     LOG_LEVEL: str = "INFO"
@@ -165,6 +171,10 @@ class Settings(BaseSettings):
     @property
     def sso_session_secret(self) -> str:
         return self.SSO_SESSION_SECRET or os.getenv(self.SSO_SESSION_SECRET_ENV, "")
+
+    @property
+    def integration_api_key(self) -> str:
+        return self.INTEGRATION_API_KEY or os.getenv(self.INTEGRATION_API_KEY_ENV, "")
     
     @property
     def jwt_private_key(self) -> str:
