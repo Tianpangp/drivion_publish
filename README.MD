@@ -126,30 +126,247 @@ publish/
 
 ---
 
+## `config.toml` 配置指南
+
+发布系统的主配置文件位于项目根目录 [`config.toml`](./config.toml)。后端启动时读取一次，修改后需要重启后端。
+
+默认配置文件路径可以用 `PUBLISH_CONFIG_FILE` 环境变量覆盖：
+
+```bash
+PUBLISH_CONFIG_FILE=/etc/drivion/publish.toml \
+  conda run -n service python publish-svc/main.py
+```
+
+### 完整配置示例
+
+```toml
+[server]
+host = "0.0.0.0"
+port = 8001
+debug = true
+cors_origins = ["http://localhost:5173"]
+
+[database]
+# sqlite / mysql / postgresql
+type = "sqlite"
+sqlite_path = "./data/publish.db"
+host = "localhost"
+port = 3306
+name = "publish_system"
+username = "root"
+password = ""
+charset = "utf8mb4"
+
+[storage]
+# local / minio / s3
+provider = "local"
+local_dir = "./uploads/objects"
+endpoint = "http://192.168.3.68:9000"
+access_key = "minioadmin"
+secret_key = "minioadmin"
+bucket = "publish-system"
+region = "us-east-1"
+secure = false
+
+[auth]
+# local: 使用发布系统内置用户和权限
+# sso: 使用 Drivion SSO
+mode = "local"
+
+[auth.sso]
+issuer = "http://localhost:8002"
+client_id = "release"
+client_secret_env = "RELEASE_OIDC_CLIENT_SECRET"
+scope = "openid profile"
+redirect_uri = "http://localhost:8001/publish/api/v1/auth/sso/callback"
+frontend_redirect_uri = "http://localhost:5173/auth/callback"
+session_secret_env = "PUBLISH_SSO_SESSION_SECRET"
+session_cookie_name = "publish_sso_session"
+transaction_cookie_name = "publish_sso_transaction"
+cookie_secure = false
+session_max_age_seconds = 604800
+refresh_before_expiry_seconds = 60
+http_timeout_seconds = 10
+introspect_high_risk = true
+```
+
+### 服务配置
+
+| 配置项 | 说明 |
+|--------|------|
+| `server.host` | 后端监听地址；容器或局域网部署通常使用 `0.0.0.0` |
+| `server.port` | 后端端口，默认 `8001` |
+| `server.debug` | 调试开关，生产环境应设为 `false` |
+| `server.cors_origins` | 允许访问 API 的前端 Origin 列表，需填写完整的协议、主机和端口 |
+
+### 数据库配置
+
+支持 `sqlite`、`mysql` 和 `postgresql`。本地开发推荐 SQLite，独立部署可换成 MySQL 或 PostgreSQL。
+
+SQLite 只使用 `sqlite_path`：
+
+```toml
+[database]
+type = "sqlite"
+sqlite_path = "./data/publish.db"
+```
+
+MySQL 示例：
+
+```toml
+[database]
+type = "mysql"
+host = "192.168.3.68"
+port = 3306
+name = "publish_system"
+username = "publish"
+password = "change-me"
+charset = "utf8mb4"
+```
+
+PostgreSQL 示例：
+
+```toml
+[database]
+type = "postgresql"
+host = "127.0.0.1"
+port = 5432
+name = "publish_system"
+username = "publish"
+password = "change-me"
+```
+
+也可以通过 `DATABASE_URL` 环境变量直接提供 SQLAlchemy 异步连接地址，并覆盖 `[database]` 中的连接参数：
+
+```bash
+export DATABASE_URL='mysql+aiomysql://publish:password@127.0.0.1:3306/publish_system?charset=utf8mb4'
+```
+
+`sqlite_path` 和本地存储路径为相对路径时，以后端进程的当前工作目录为基准。生产部署建议使用绝对路径。
+
+### 制品存储配置
+
+AutoUnit 和 HAL 压缩包可以存放在本地目录、MinIO 或 S3 兼容对象存储中。
+
+本地存储：
+
+```toml
+[storage]
+provider = "local"
+local_dir = "/var/lib/drivion-publish/objects"
+```
+
+MinIO：
+
+```toml
+[storage]
+provider = "minio"
+endpoint = "http://192.168.3.68:9000"
+access_key = "publish"
+secret_key = "change-me"
+bucket = "publish-system"
+region = "us-east-1"
+secure = false
+```
+
+AWS S3 或其他 S3 兼容服务：
+
+```toml
+[storage]
+provider = "s3"
+# AWS S3 可留空；其他 S3 兼容服务填写其 endpoint
+endpoint = ""
+access_key = "change-me"
+secret_key = "change-me"
+bucket = "publish-system"
+region = "ap-southeast-1"
+secure = true
+```
+
+对象存储的 bucket 不存在时，后端会尝试自动创建，因此所配置的账号需具备对应权限。生产环境不应使用示例中的默认密钥。
+
+### 认证配置
+
+#### 内置认证
+
+```toml
+[auth]
+mode = "local"
+```
+
+`local` 模式使用发布系统自己的用户、角色申请和管理功能，不依赖 SSO。
+
+#### Drivion SSO
+
+```toml
+[auth]
+mode = "sso"
+
+[auth.sso]
+issuer = "https://sso.example.com"
+client_id = "release"
+client_secret_env = "RELEASE_OIDC_CLIENT_SECRET"
+scope = "openid profile"
+redirect_uri = "https://publish-api.example.com/publish/api/v1/auth/sso/callback"
+frontend_redirect_uri = "https://publish.example.com/auth/callback"
+session_secret_env = "PUBLISH_SSO_SESSION_SECRET"
+session_cookie_name = "publish_sso_session"
+transaction_cookie_name = "publish_sso_transaction"
+cookie_secure = true
+session_max_age_seconds = 604800
+refresh_before_expiry_seconds = 60
+http_timeout_seconds = 10
+introspect_high_risk = true
+```
+
+SSO 客户端密钥和会话加密密钥从环境变量读取：
+
+```bash
+export RELEASE_OIDC_CLIENT_SECRET='SSO 中 release 客户端的密钥'
+export PUBLISH_SSO_SESSION_SECRET="$(openssl rand -hex 32)"
+conda run -n service python publish-svc/main.py
+```
+
+SSO 模式还需要在 SSO 的 `release` 客户端中登记与 `redirect_uri` **完全一致**的回调地址。后端不把 OIDC Token 传给浏览器，浏览器只保存 HttpOnly 会话 Cookie。
+
+| 配置项 | 说明 |
+|--------|------|
+| `issuer` | SSO 服务根地址，用于 OIDC Discovery、JWKS、Token 和注销接口 |
+| `client_id` | SSO 中为发布系统登记的客户端 ID，默认 `release` |
+| `client_secret_env` | 保存客户端密钥的环境变量名 |
+| `redirect_uri` | SSO 授权后回调的发布后端地址 |
+| `frontend_redirect_uri` | 后端完成登录后跳转的前端地址 |
+| `session_secret_env` | 保存服务端会话加密密钥的环境变量名 |
+| `cookie_secure` | HTTPS 部署必须设为 `true`；仅本地 HTTP 开发使用 `false` |
+| `session_max_age_seconds` | 发布系统 SSO 会话最长存活时间 |
+| `refresh_before_expiry_seconds` | Access Token 距离过期少于该值时自动刷新 |
+| `http_timeout_seconds` | 发布后端访问 SSO 的 HTTP 超时时间 |
+| `introspect_high_risk` | 高风险写操作前实时向 SSO 校验 Token 和最新权限，生产环境建议保持 `true` |
+
+发布系统在 SSO 模式下只使用 Token 中的 `permissions` 判定权限，不使用 scope 做厂区、线体或工位范围限制。其中 AutoUnit 写操作需要 `autounit.definition.publish`，HAL 写操作需要 `hal.driver.publish`；测试和发布审批使用对应的 SSO 审批权限。
+
+### 生产配置检查
+
+- 将 `server.debug` 设为 `false`，并只在 `cors_origins` 中保留实际前端地址。
+- 使用 MySQL/PostgreSQL 和 MinIO/S3，或将 SQLite/本地制品目录挂载到持久化磁盘。
+- 使用 HTTPS，并在 SSO 模式下将 `cookie_secure` 设为 `true`。
+- 替换示例中的所有密码和对象存储密钥，限制配置文件的文件权限。
+- 保持 `introspect_high_risk = true`，以便 SSO 权限被撤销后立即阻止高风险写操作。
+
+---
+
 ## 快速开始
 
 ### 1. 后端 (publish-svc)
 
 ```bash
-cd publish-svc
-
-# 一键初始化环境
-bash setup.sh
-
-# 编辑 .env 配置数据库连接
-vim .env
-
-# 初始化数据库
-mysql -u root -p < sql/init.sql
-
-# 启动服务 (默认 :8000)
-bash start.sh
-# 或: python main.py
+# 在 publish 根目录编辑 config.toml，然后使用 service 环境启动
+conda run -n service python publish-svc/main.py
 ```
 
 API 文档自动托管:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+- Swagger UI: http://localhost:8001/docs
+- ReDoc: http://localhost:8001/redoc
 
 ### 2. 前端 (publish-ui)
 
@@ -159,7 +376,7 @@ cd publish-ui
 # 安装依赖
 npm install
 
-# 启动开发服务器 (默认 :5173, 自动代理到 :8000)
+# 启动开发服务器 (默认 :5173, 自动代理到 :8001)
 npm run dev
 
 # 生产构建
